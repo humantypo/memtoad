@@ -28,3 +28,5 @@ Each entry: date, what was done (WHY-focused), any cross-refs to lessons or deci
 
 - [architectural_decisions.md](architectural_decisions.md) — design principles, non-negotiable patterns
 - [lessons_learned.md](lessons_learned.md) — anti-patterns and hard-won insights (most recent at top)
+
+<!-- memtoad:uninitialized -->

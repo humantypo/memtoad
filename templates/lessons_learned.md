@@ -6,3 +6,5 @@ a lesson is non-obvious — if it's standard practice or documented in the frame
 Cross-references use (→ slug-name) notation.
 
 ---
+
+<!-- memtoad:uninitialized -->

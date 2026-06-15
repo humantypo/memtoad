@@ -74,12 +74,15 @@ project-root/
     │   │   └── SKILL.md            # reads 3 diary files, synthesizes briefing
     │   ├── session-historian/
     │   │   └── SKILL.md            # writes to diary files inline at session end
-    │   └── grill-me/
-    │       └── SKILL.md            # interrogates a plan informed by project context
+    │   ├── grill-me/
+    │   │   └── SKILL.md            # interrogates a plan informed by project context
+    │   └── bootstrap/
+    │       └── SKILL.md            # populates diary on a freshly installed project
     └── commands/
         ├── startup.md              # /startup command
         ├── session-historian.md    # /session-historian command
-        └── grill-me.md             # /grill-me command
+        ├── grill-me.md             # /grill-me command
+        └── bootstrap.md            # /bootstrap command
 ```
 
 The `diary/` files are the runtime artifacts. The `.claude/` files are the instructions that operate on them. The `templates/` directory in this repo contains ready-to-copy blank starters for the diary files.
@@ -310,9 +313,123 @@ For each question, provide 2–4 concrete multiple-choice options representing t
 
 ---
 
+### `bootstrap` — populates the diary after installation
+
+Run once after installing Memtoad on an existing project (or a new project with some initial docs). Inspects the codebase and available documentation, then conducts a short targeted Q&A to surface what code inspection alone cannot reveal — the non-obvious decisions, the failure modes, the deferred work. Writes first-draft entries into all three diary files.
+
+The skill detects which files need population by checking for a `<!-- memtoad:uninitialized -->` sentinel that the install templates include. Files that already have entries are left alone unless the user explicitly confirms merge mode.
+
+**File**: `.claude/skills/bootstrap/SKILL.md`
+
+```markdown
+---
+name: bootstrap
+description: Populate the diary from scratch on a project that just had Memtoad installed. Inspects existing code and docs, asks targeted questions about what the code can't reveal, then writes first-draft entries into all three diary files. Safe to run on partially-initialized diaries — detects which files need population via a sentinel marker.
+---
+
+Populate the Memtoad diary for this project. Run **inline in the main conversation** (do not spawn an agent).
+
+## Phase 0: Detect state
+
+Read all three diary files:
+1. `diary/session_context.md`
+2. `diary/architectural_decisions.md`
+3. `diary/lessons_learned.md`
+
+For each file, check whether it contains `<!-- memtoad:uninitialized -->`. Build a list of which files are uninitialized (sentinel present) vs. already populated (no sentinel).
+
+- **All uninitialized**: proceed to Phase 1 without prompting.
+- **Some uninitialized, some not**: note which files already have entries. Proceed to populate only the uninitialized ones.
+- **All initialized**: use the **AskUserQuestion** tool to ask the user whether to proceed in merge mode (add new entries without overwriting existing ones) or abort. If they choose to abort, stop here.
+
+## Phase 1: Inspect codebase
+
+Read whatever exists, in this order (skip any not present):
+1. `CLAUDE.md`
+2. `README.md`
+3. Package manifest — whichever is present: `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pom.xml`, `Gemfile`, `Makefile`
+4. Up to 5 files in `docs/` or `doc/`
+
+Also run: `git log --oneline -30` to understand project history and timeline (if not a git repo, skip).
+
+After reading, form an internal picture of what the project does, its stack, its maturity, and any decisions or patterns visible in the code or docs. Do not output anything to the user yet — this phase is silent.
+
+## Phase 2: Targeted Q&A
+
+Ask the user questions to surface what code inspection alone cannot reveal. Ask **one at a time** and wait for each answer before proceeding.
+
+For binary or categorical choices, use the **AskUserQuestion** tool. For follow-up questions that need free-form description, ask as plain text.
+
+**Q1 — Current state gaps** (informs `session_context.md`):
+
+Use AskUserQuestion:
+> "I've read the available docs. Is there anything about the current project state not captured there?"
+
+Options:
+- "Nothing to add — docs reflect current state"
+- "There's active in-progress work to note"
+- "There are known blockers or deferred items"
+- Other (custom)
+
+If the user indicates there's something to capture, ask as plain text: "Briefly describe what's in-progress or deferred — enough that you could pick it back up without re-reading the full history."
+
+**Q2 — Architectural decisions** (informs `architectural_decisions.md`):
+
+Use AskUserQuestion:
+> "Are there non-obvious design decisions on this project that aren't captured in the docs — choices a new engineer would be surprised by?"
+
+Options:
+- "Yes — there are decisions worth capturing"
+- "Not yet — project is too early"
+- "Already in the docs you read"
+- Other (custom)
+
+If yes, ask as plain text: "Describe the key decision: what was chosen, what was the alternative, and what constraint or failure mode drove the choice?"
+
+**Q3 — Lessons learned** (informs `lessons_learned.md`):
+
+Use AskUserQuestion:
+> "Are there failure modes, anti-patterns, or hard-won rules specific to this project — things that aren't obvious from the code?"
+
+Options:
+- "Yes — there are lessons worth capturing"
+- "Not yet — too early to have hard-won lessons"
+- "Already in the docs you read"
+- Other (custom)
+
+If yes, ask as plain text: "Describe what happened and what the one-sentence rule would be for a future engineer."
+
+## Phase 3: Write diary files
+
+Write or update each file that is uninitialized (or confirmed for merge in Phase 0). Remove `<!-- memtoad:uninitialized -->` from every file you write.
+
+**`diary/session_context.md`**:
+- **Current State**: one paragraph synthesizing Phase 1 findings plus any gaps the user named in Q1. Describe what the system is, its production status, key tech facts.
+- **Most Recent Sessions**: leave empty — this is populated by `/session-historian` going forward.
+- **Open Items**: populate from any deferred work found in existing docs, plus anything the user described in Q1.
+- **Key Diary Files**: standard links to the other two files.
+- Update the `[Date]` placeholder with today's date if still present.
+
+**`diary/architectural_decisions.md`**:
+- If decisions were found in docs (Phase 1) or the user described one (Q2): write entries using `## slug-based-header (Month YYYY)` format. One sentence stating the decision, then a **Why** section for the reasoning.
+- If no decisions exist yet: write a single minimal entry noting when the diary was initialized, to be expanded as decisions are made.
+- Remove `<!-- memtoad:uninitialized -->`.
+
+**`diary/lessons_learned.md`**:
+- If the user described lessons in Q3: write entries using `## slug-based-header (Month YYYY)` format with a **Rule** and **Why** section.
+- If no lessons yet: leave the file with just the header (no entries) and remove only the sentinel.
+- Remove `<!-- memtoad:uninitialized -->`.
+
+After writing all files, output a brief summary: which files were written, how many entries were added to each, and remind the user to run `/startup` to verify the briefing reads coherently.
+```
+
+**When to invoke**: once, immediately after `install.sh` runs on an existing project. For new projects, run it after writing the first few lines of a README or CLAUDE.md so the skill has something to inspect.
+
+---
+
 ## Command wrappers
 
-Install these in `.claude/commands/` to enable `/startup`, `/session-historian`, and `/grill-me` as slash commands.
+Install these in `.claude/commands/` to enable `/startup`, `/session-historian`, `/grill-me`, and `/bootstrap` as slash commands.
 
 **`.claude/commands/startup.md`**:
 
@@ -351,6 +468,16 @@ description: Stress-test a plan or design — reads project diary first, then in
 Invoke the grill-me skill. First read all three files in diary/ to load project context and surface relevant constraints. Then interview me about my plan or design using the AskUserQuestion tool, one question at a time, until all branches of the decision tree are resolved.
 ```
 
+**`.claude/commands/bootstrap.md`**:
+
+```markdown
+---
+description: Populate diary files from scratch — inspects codebase, asks targeted questions, writes first-draft entries
+---
+
+Invoke the bootstrap skill. Check diary files for the uninitialized sentinel, inspect the codebase and docs, ask targeted questions about what the code can't reveal, then write first-draft entries into all three diary files. Safe on partially-initialized diaries — only writes to files that still contain the sentinel (or are confirmed for merge).
+```
+
 ---
 
 ## CLAUDE.md integration
@@ -382,7 +509,7 @@ For component-level `CLAUDE.md` files (inside a subdirectory like `frontend/` or
 
 For a project with no existing documentation or captured decisions.
 
-**Quick path**: `install.sh /path/to/your/project` — detects the project type, runs steps 1–4 automatically (creates diary, installs skills, updates CLAUDE.md, configures `.gitignore`), then prints the bootstrap prompt. Steps 5–6 remain manual. The lower-level `scripts/install-new.sh` is available if you want to bypass detection and run new-project init directly.
+**Quick path**: `install.sh /path/to/your/project` — detects the project type, runs steps 1–4 automatically (creates diary, installs skills, updates CLAUDE.md, configures `.gitignore`), then prompts you to run `/bootstrap`. Step 6 (verify) remains manual.
 
 **Manual steps**:
 
@@ -395,10 +522,10 @@ For a project with no existing documentation or captured decisions.
 
 2. **Install the skills**:
    ```bash
-   mkdir -p .claude/skills/startup .claude/skills/session-historian .claude/skills/grill-me .claude/commands
+   mkdir -p .claude/skills/startup .claude/skills/session-historian .claude/skills/grill-me .claude/skills/bootstrap .claude/commands
    ```
    Copy `SKILL.md` for each skill from the `.claude/skills/` directory of this repo.
-   Copy the three command wrappers from `.claude/commands/` of this repo.
+   Copy the four command wrappers from `.claude/commands/` of this repo.
 
 3. **Add the Project Memory section to your root `CLAUDE.md`** (create it if it doesn't exist).
 
@@ -407,9 +534,7 @@ For a project with no existing documentation or captured decisions.
    - **Hybrid**: track `architectural_decisions.md` + `lessons_learned.md`, ignore `session_context.md` (recommended for teams)
    - **Private**: ignore entire `diary/` (each contributor manages their own diary locally)
 
-5. **Run a bootstrap session** — open Claude Code in the project and give it this prompt:
-
-   > "I just initialized Memtoad in this project. Please read CLAUDE.md and any existing README or design docs, then write a first draft of the three diary files based on what you find. For `diary/session_context.md`, describe the current state of the project. For `diary/architectural_decisions.md`, write one entry for the most important design choice already made. Leave `diary/lessons_learned.md` with just the header — no entries yet."
+5. **Run `/bootstrap`** — open Claude Code in the project directory and run `/bootstrap`. This inspects the codebase, asks targeted questions about what the code can't reveal, and writes first-draft diary entries.
 
 6. **Verify**: run `/startup` to confirm Claude can load and synthesize the diary into a coherent briefing.
 
@@ -419,7 +544,7 @@ For a project with no existing documentation or captured decisions.
 
 For a project with existing documentation, past decisions, and accumulated knowledge. The challenge here is that existing docs may be scattered — README files, design docs, inline comments, old ADRs. This is a distillation exercise, not a copy exercise.
 
-**Quick path**: `install.sh /path/to/your/project` — detects existing code, runs steps 1–4 automatically (creates diary, installs skills, updates CLAUDE.md, configures `.gitignore`), auto-discovers doc files (`README.md`, `CLAUDE.md`, `docs/`), and writes `MEMTOAD_INIT.md` in the project root with all five Claude prompts ready to paste. Steps 5–9 remain manual. The lower-level `scripts/install-existing.sh` accepts explicit doc paths if you want to override auto-detection.
+**Quick path**: `install.sh /path/to/your/project` — detects existing code, runs steps 1–4 automatically (creates diary, installs skills, updates CLAUDE.md, configures `.gitignore`), auto-discovers doc files (`README.md`, `CLAUDE.md`, `docs/`), and writes `MEMTOAD_INIT.md` with the `/bootstrap` prompt and post-bootstrap steps. Steps 5–7 remain manual.
 
 **Manual steps**:
 
@@ -431,26 +556,15 @@ For a project with existing documentation, past decisions, and accumulated knowl
 
 4. **Configure git tracking** (same as new project, step 4).
 
-5. **Populate `diary/architectural_decisions.md` from existing docs**:
+5. **Run `/bootstrap`** — open Claude Code in the project directory and run `/bootstrap`. The skill auto-detects your docs, reads the codebase, asks targeted questions about decisions and lessons that aren't in the docs, then writes first-draft entries into all three diary files.
 
-   Open Claude Code and provide the prompt:
-   > "Read [list your main docs: CLAUDE.md, README.md, design docs, etc.]. For each non-obvious architectural decision you find — a choice where a future engineer would ask 'why did they do it this way?' and the answer isn't obvious from the code — write a dated entry in `diary/architectural_decisions.md` using the `## slug-based-header (Month YYYY)` format. Extract the decision and its reasoning; do not copy text verbatim. Skip anything that is obvious best practice or already enforced by tooling."
-
-6. **Populate `diary/lessons_learned.md` from existing docs**:
-
-   > "Read the same docs. For each anti-pattern, failure mode, or hard-won rule you find — things the team learned through experience, not from a manual — write an entry in `diary/lessons_learned.md` using the `## slug-based-header` format with a one-sentence **Rule** and a **Why** section. Skip general advice; focus on project-specific lessons with a specific incident or failure behind them."
-
-7. **Write `diary/session_context.md`**:
-
-   > "Based on what you've read, write `diary/session_context.md`. The Current State section should be one paragraph describing what the system is and what state it's in right now. Leave Most Recent Sessions empty — that will be filled in going forward. Populate Open Items with any known deferred work you found in the existing docs."
-
-8. **Prune**: read all three files yourself. Remove:
+6. **Prune**: read all three files yourself. Remove:
    - Anything obvious from the code or standard in the framework
    - Anything already enforced by tests, linters, or CI
    - Any entry whose WHY section is "because we always do it this way"
    - Any entry without a specific incident or reasoning behind it
 
-9. **Run `/startup`** to confirm the briefing makes sense and captures what a new contributor would actually need to know.
+7. **Run `/startup`** to confirm the briefing makes sense and captures what a new contributor would actually need to know.
 
 ---
 
@@ -493,6 +607,8 @@ Each entry: date, what was done (WHY-focused), any cross-refs to lessons or deci
 
 - [architectural_decisions.md](architectural_decisions.md) — design principles, non-negotiable patterns
 - [lessons_learned.md](lessons_learned.md) — anti-patterns and hard-won insights (most recent at top)
+
+<!-- memtoad:uninitialized -->
 ```
 
 ---
@@ -510,9 +626,10 @@ Most recent decisions at top. No archiving.
 
 ---
 
+<!-- memtoad:uninitialized -->
 ```
 
-*(Leave empty below the header. The bootstrap session or first real session will add the first entry.)*
+*(The `<!-- memtoad:uninitialized -->` sentinel tells `/bootstrap` that this file needs population. It is removed when the first entries are written.)*
 
 ---
 
@@ -528,9 +645,10 @@ Cross-references use (→ slug-name) notation.
 
 ---
 
+<!-- memtoad:uninitialized -->
 ```
 
-*(Leave empty below the header.)*
+*(Sentinel removed when the first entries are written, or when `/bootstrap` determines there are no lessons to capture yet.)*
 
 ---
 

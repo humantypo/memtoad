@@ -4,7 +4,7 @@
 # Detects whether the target has existing code, confirms the init mode,
 # installs skills/commands/diary skeleton, injects CLAUDE.md section,
 # configures .gitignore tracking, and (for existing projects) writes
-# MEMTOAD_INIT.md with the Claude prompts for steps 4–8.
+# MEMTOAD_INIT.md with the /bootstrap prompt and post-bootstrap steps.
 #
 # Usage:
 #   ./install.sh <target>                          # smart detection, interactive
@@ -246,9 +246,10 @@ install_files() {
     "$target/.claude/skills/startup" \
     "$target/.claude/skills/session-historian" \
     "$target/.claude/skills/grill-me" \
+    "$target/.claude/skills/bootstrap" \
     "$target/.claude/commands"
 
-  for skill in startup session-historian grill-me; do
+  for skill in startup session-historian grill-me bootstrap; do
     local src="$SCRIPT_DIR/.claude/skills/$skill/SKILL.md"
     local dest="$target/.claude/skills/$skill/SKILL.md"
     if [[ "$src" -ef "$dest" ]]; then
@@ -263,7 +264,7 @@ install_files() {
     fi
   done
 
-  for cmd in startup session-historian grill-me; do
+  for cmd in startup session-historian grill-me bootstrap; do
     local src="$SCRIPT_DIR/.claude/commands/$cmd.md"
     local dest="$target/.claude/commands/$cmd.md"
     if [[ "$src" -ef "$dest" ]]; then
@@ -327,52 +328,27 @@ write_init_file() {
   local out="$target/MEMTOAD_INIT.md"
 
   cat > "$out" << INITFILE
-# Memtoad Initialization Prompts
+# Memtoad Initialization
 
-Run these prompts in Claude Code **in order, in the same session**.
 Delete this file when initialization is complete.
 
-**Docs for Claude to reference:** $docs
+**Docs detected:** $docs
 
 ---
 
-## Step 4 — Extract architectural decisions
+## Step 4 — Populate the diary
 
-Paste into Claude Code:
+Open Claude Code in this project directory and run:
 
-> Read $docs. For each non-obvious architectural decision you find — a choice where a
-> future engineer would ask "why did they do it this way?" and the answer is not obvious
-> from the code — write a dated entry in \`diary/architectural_decisions.md\` using the
-> \`## slug-based-header (Month YYYY)\` format. Extract the decision and its reasoning;
-> do not copy text verbatim. Skip anything that is obvious best practice or already
-> enforced by tooling.
+    /bootstrap
 
----
-
-## Step 5 — Extract lessons learned
-
-Paste into Claude Code (same session):
-
-> Read the same docs. For each anti-pattern, failure mode, or hard-won rule you find —
-> things learned through experience, not from a manual — write an entry in
-> \`diary/lessons_learned.md\` using the \`## slug-based-header (Month YYYY)\` format
-> with a one-sentence **Rule:** and a **Why:** section. Skip general advice; focus on
-> project-specific lessons with a specific incident or failure behind them.
+This inspects your codebase (including $docs), asks a few targeted questions
+about what the code and docs can't reveal, and writes first-draft entries into
+all three diary files.
 
 ---
 
-## Step 6 — Write session_context.md
-
-Paste into Claude Code (same session):
-
-> Based on what you have read, write \`diary/session_context.md\`. The Current State
-> section should be one paragraph describing what the system is and what state it is in
-> right now. Leave Most Recent Sessions empty — that will be filled in going forward.
-> Populate Open Items with any known deferred work you found in the docs.
-
----
-
-## Step 7 — Prune (you do this, not Claude)
+## Step 5 — Prune (you do this, not Claude)
 
 Read all three diary files yourself and remove:
 - Anything obvious from the code or standard in the framework
@@ -382,7 +358,7 @@ Read all three diary files yourself and remove:
 
 ---
 
-## Step 8 — Verify
+## Step 6 — Verify
 
 Run \`/startup\` to confirm Claude synthesizes the diary into a coherent briefing
 that a new contributor would actually find useful.
@@ -392,7 +368,7 @@ that a new contributor would actually find useful.
 *Delete this file after initialization is complete.*
 INITFILE
 
-  echo "  $(green "Created  MEMTOAD_INIT.md (prompts for steps 4–8)")"
+  echo "  $(green "Created  MEMTOAD_INIT.md (steps 4–6)")"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -502,25 +478,13 @@ if [[ "$DETECTED" == "new" ]]; then
  Done. Steps 1–3 complete.
 ════════════════════════════════════════════════════════════════
 
-Step 4: Open Claude Code in the project directory and paste
-        this bootstrap prompt:
+Step 4: Open Claude Code in the project directory and run:
 
-────────────────────────────────────────────────────────────────
-I just initialized Memtoad in this project. Please read CLAUDE.md
-and any existing README or design docs, then write a first draft
-of the three diary files based on what you find.
+        /bootstrap
 
-- diary/session_context.md: describe the current state of the
-  project in one paragraph. Leave Most Recent Sessions empty.
-  Populate Open Items with any deferred work found in the docs.
-
-- diary/architectural_decisions.md: write one entry for the most
-  important design choice already made, using the
-  ## slug-based-header (Month YYYY) format.
-
-- diary/lessons_learned.md: leave it with just the header —
-  no entries yet.
-────────────────────────────────────────────────────────────────
+        This inspects your codebase and docs, asks a few targeted
+        questions about what the code can't reveal, and writes
+        first-draft diary entries you can refine over time.
 
 Step 5: Run /startup to verify Claude can synthesize the diary
         into a coherent briefing.
