@@ -1,0 +1,10 @@
+
+# OS / editor noise
+.DS_Store
+*.swp
+*~
+
+# Memtoad [mode: hybrid]
+MEMTOAD_INIT.md
+diary/session_context.md
+# End Memtoad
