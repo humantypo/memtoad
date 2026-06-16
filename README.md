@@ -1,6 +1,6 @@
 # Memtoad
 
-Persistent, readable project memory for Claude Code. Three markdown files. Three skills. No database, no cloud sync, no archiving.
+Persistent, readable project memory for Claude Code. Three markdown files. Three skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
 
 ---
 
