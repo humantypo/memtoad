@@ -491,6 +491,13 @@ Cross-project decisions, lessons, and current work live in [`diary/`](diary/):
 - [`diary/session_context.md`](diary/session_context.md) — current state and recent work
 - [`diary/architectural_decisions.md`](diary/architectural_decisions.md) — design principles and non-negotiable patterns
 - [`diary/lessons_learned.md`](diary/lessons_learned.md) — anti-patterns and hard-won insights
+
+**Before making any git commit**, always run `/session-historian` first to update the diary with what was accomplished. The diary is the primary context source for future sessions and for `/grill-me` — skipping this step means the next session starts blind.
+
+Commit workflow:
+1. Tests pass
+2. `/session-historian` — update diary
+3. `git commit` — with a message informed by what `/session-historian` recorded
 ```
 
 For component-level `CLAUDE.md` files (inside a subdirectory like `frontend/` or `api/`), use relative paths:
@@ -532,7 +539,7 @@ For a project with no existing documentation or captured decisions.
 4. **Configure git tracking** — add a Memtoad section to `.gitignore`. Choose a mode:
    - **Shared**: track all diary files (solo project or single active contributor)
    - **Hybrid**: track `architectural_decisions.md` + `lessons_learned.md`, ignore `session_context.md` (recommended for teams)
-   - **Private**: ignore entire `diary/` (each contributor manages their own diary locally)
+   - **Private**: ignore entire `diary/` and `CLAUDE.md` (each contributor manages their own diary locally; CLAUDE.md is also ignored so Memtoad workflow instructions aren't pushed to teammates who may not have Memtoad installed)
 
 5. **Run `/bootstrap`** — open Claude Code in the project directory and run `/bootstrap`. This inspects the codebase, asks targeted questions about what the code can't reveal, and writes first-draft diary entries.
 

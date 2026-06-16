@@ -8,6 +8,22 @@ Most recent decisions at top. No archiving.
 
 ---
 
+## private-mode-gitignores-claude-md (June 2026)
+
+In private mode, the install scripts add `CLAUDE.md` to `.gitignore` alongside `diary/`.
+
+**Why**: In private mode each contributor manages their own diary locally — but the CLAUDE.md Project Memory section now contains Memtoad-specific workflow instructions (`/session-historian`, `/grill-me`, the 3-step commit order). Pushing that content to teammates who haven't installed Memtoad produces confusing slash commands that don't exist for them and a pre-commit instruction they can't follow. Gitignoring CLAUDE.md in private mode keeps Memtoad's footprint fully local to the contributor who chose private tracking. Shared and hybrid modes commit CLAUDE.md normally because the team is presumed to share the tooling. (→ pre-commit-workflow-in-claude-md)
+
+---
+
+## pre-commit-workflow-in-claude-md (June 2026)
+
+The install scripts inject a 3-step pre-commit workflow block into the target project's CLAUDE.md as part of the Project Memory section.
+
+**Why**: The workflow (tests → `/session-historian` → `git commit`) is only followed if it's visible at the moment a developer is about to commit. Documenting it in the README or install guide is insufficient — those are read once during setup. CLAUDE.md is loaded into every Claude Code session, making it the right place for any rule that must be enforced before every commit. Without this block, the first session after install ends in a commit that skips `/session-historian` and starts the next session blind. (→ private-mode-gitignores-claude-md)
+
+---
+
 ## grill-me-reads-diary-first (June 2026)
 
 The grill-me skill reads all three diary files before asking its first question.

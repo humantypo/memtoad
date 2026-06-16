@@ -101,7 +101,7 @@ update_gitignore() {
   local entries="MEMTOAD_INIT.md"
   case "$mode" in
     hybrid)  entries+=$'\n'"diary/session_context.md" ;;
-    private) entries+=$'\n'"diary/" ;;
+    private) entries+=$'\n'"diary/"$'\n'"CLAUDE.md" ;;
   esac
 
   local action="Created"
@@ -179,7 +179,14 @@ PROJECT_MEMORY_BLOCK="## Project Memory
 Cross-project decisions, lessons, and current work live in [\`diary/\`](diary/):
 - [\`diary/session_context.md\`](diary/session_context.md) — current state and recent work
 - [\`diary/architectural_decisions.md\`](diary/architectural_decisions.md) — design principles and non-negotiable patterns
-- [\`diary/lessons_learned.md\`](diary/lessons_learned.md) — anti-patterns and hard-won insights"
+- [\`diary/lessons_learned.md\`](diary/lessons_learned.md) — anti-patterns and hard-won insights
+
+**Before making any git commit**, always run \`/session-historian\` first to update the diary with what was accomplished. The diary is the primary context source for future sessions and for \`/grill-me\` — skipping this step means the next session starts blind.
+
+Commit workflow:
+1. Tests pass
+2. \`/session-historian\` — update diary
+3. \`git commit\` — with a message informed by what \`/session-historian\` recorded"
 
 if [[ -f "$CLAUDE_FILE" ]]; then
   if grep -q "## Project Memory" "$CLAUDE_FILE"; then
