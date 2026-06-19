@@ -33,12 +33,6 @@ Claude is Frog. The diary is Toad's list.
 Memtoad is a Claude Code plugin. Install it once and it's available in every project.
 
 ```
-/plugin install memtoad@claude-plugins-official
-```
-
-Or install directly from GitHub while awaiting marketplace listing:
-
-```
 /plugin install github:humantypo/memtoad
 ```
 
