@@ -5,7 +5,15 @@ description: Document the current session's accomplishments, decisions, and less
 
 Run the following **inline in the main conversation** (do not spawn an agent — you already have full session context):
 
-## What to update
+## Modes
+
+**FULL** (default when invoked directly): Update all three diary files as appropriate. Used after sessions with code changes, new decisions, or significant work.
+
+**LIGHTWEIGHT** (invoked by `/committer` for documentation-only commits): Update only `diary/session_context.md`. Append to `diary/lessons_learned.md` only if something genuinely non-obvious was learned. Do not touch `diary/architectural_decisions.md`.
+
+When invoked directly via `/session-historian`, always run FULL. The `/committer` skill decides which mode to use based on what's staged.
+
+## What to update (FULL mode)
 
 **Always**: Rewrite `diary/session_context.md` with the current state:
 - Date and project version/status
@@ -40,12 +48,4 @@ Run the following **inline in the main conversation** (do not spawn an agent —
 - Cross-references use `(→ slug-name)` notation, not numbers
 - No archiving — files grow without rotation
 
-## Commit discipline
-
-Run session-historian *before* staging the commit, not after. The correct order:
-1. Run tests
-2. Run `/session-historian` — write diary entries
-3. Stage `diary/` alongside the code changes
-4. Commit everything together
-
-Do not reference the commit hash in diary entries; it isn't known yet when session-historian runs. The git log is the authoritative record of what changed and when.
+Do not reference the commit hash in diary entries; it isn't known until after the commit. The git log is the authoritative record of what changed and when. Use `/committer` to handle the diary update and commit atomically.

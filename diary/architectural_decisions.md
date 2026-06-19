@@ -8,6 +8,30 @@ Most recent decisions at top. No archiving.
 
 ---
 
+## committer-owns-commit-discipline (June 2026)
+
+The `committer` skill owns the session-historian invocation and commit workflow; `session-historian` no longer instructs users to run it before committing.
+
+**Why**: When `/session-historian` said "run me before every commit," users had to remember two commands in the right order. The `committer` skill makes the diary update and commit a single atomic operation — it calls session-historian internally, stages diary changes, confirms the file list, and commits. Session-historian invoked directly (outside a commit context) always runs FULL and is appropriate for mid-session documentation. The split removes the manual coordination burden while keeping both skills composable.
+
+---
+
+## bootstrap-owns-project-init (June 2026)
+
+The `bootstrap` skill handles complete project initialization — creating `diary/`, injecting the CLAUDE.md section, and configuring `.gitignore` — in addition to populating diary content.
+
+**Why**: Before this change, project setup required running `install.sh` (a bash script) before opening Claude Code. With the plugin architecture, there is no install script per project. Bootstrap is already the first command a user runs; extending it with an idempotent Phase 0 setup removes the external dependency and makes the experience purely in-Claude. The setup steps (file creation, CLAUDE.md injection, .gitignore config) are safe to re-run and detect existing state before acting.
+
+---
+
+## plugin-not-installed (June 2026)
+
+Memtoad is distributed as a Claude Code plugin (`skills/` + `commands/` + `.claude-plugin/plugin.json`) rather than an install script that copies files into each project.
+
+**Why**: The copy-in-project model creates a frozen-firmware problem — each installed project has a static snapshot of the skills at install time. When Memtoad improves, existing projects don't benefit without a manual re-install. The plugin system delivers skills globally from one source; updating the plugin once propagates to every project immediately. The only per-project artifacts are the `diary/` files, which are data, not firmware. (→ bootstrap-owns-project-init)
+
+---
+
 ## private-mode-gitignores-claude-md (June 2026)
 
 In private mode, the install scripts add `CLAUDE.md` to `.gitignore` alongside `diary/`.

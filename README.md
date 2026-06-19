@@ -1,6 +1,6 @@
 # Memtoad
 
-Persistent, readable project memory for Claude Code. Three markdown files. Three skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
+Persistent, readable project memory for Claude Code. Three markdown files. Seven skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
 
 ---
 
@@ -18,7 +18,7 @@ Claude already has access to your code, your git history, and your file system. 
 
 Memtoad fills exactly that gap. The diary is not a substitute for git history, inline comments, or documentation — it supplements them by capturing context that wouldn't survive in any of those places.
 
-The system is designed to stay lean. Sessions that produced no new decisions or lessons write one file. Sessions that did produce something new write up to three. There is no archiving, no fourth file, no spawned agent for the historian. The files grow slowly, remain readable, and load in full on every session.
+The system is designed to stay lean. Sessions that produced no new decisions or lessons write one file. Sessions that did produce something new write up to three. There is no archiving, no fourth file. The files grow slowly, remain readable, and load in full on every session.
 
 ### Why named Memtoad
 
@@ -28,38 +28,37 @@ Claude is Frog. The diary is Toad's list.
 
 ---
 
-## Requirements
+## Installation
 
-- **bash** 3.2+ (pre-installed on macOS and Linux)
-- **git** (for `.gitignore` configuration and the `--update` detection)
-- **perl** (pre-installed on macOS and most Linux distros — used for placeholder substitution and `.gitignore` section replacement)
+Memtoad is a Claude Code plugin. Install it once and it's available in every project.
 
----
-
-## Quick start
-
-Clone this repo once, then apply it to as many projects as you like:
-
-```bash
-git clone https://github.com/your-username/memtoad.git
-~/path/to/memtoad/install.sh /path/to/your-project
+```
+/plugin install memtoad@claude-plugins-official
 ```
 
-`install.sh` detects whether the target has existing code and runs the appropriate init path. It creates the target directory if needed (with confirmation), installs skills and commands, injects the `CLAUDE.md` Project Memory section, configures `.gitignore` git tracking, and — for existing projects — writes `MEMTOAD_INIT.md` containing the Claude prompts for steps 5–9.
+Or install directly from GitHub while awaiting marketplace listing:
 
-To update skills and commands in a project that already has Memtoad installed (e.g., after pulling a new version):
-
-```bash
-~/path/to/memtoad/install.sh --update /path/to/your-project
+```
+/plugin install github:humantypo/memtoad
 ```
 
-This overwrites `.claude/skills/` and `.claude/commands/` but never touches `diary/` or `CLAUDE.md`.
+**That's it.** No shell scripts, no per-project file copying. Skills and commands are available globally in all Claude Code sessions once the plugin is installed.
+
+### Set up a new project
+
+Open Claude Code in any project directory and run:
+
+```
+/bootstrap
+```
+
+Bootstrap handles everything: creates the `diary/` directory, writes the three starter files, injects a `## Project Memory` section into `CLAUDE.md`, configures `.gitignore`, then inspects the codebase and populates the diary entries. One command, full setup.
 
 ---
 
 ## File structure
 
-In any target project:
+In any target project after `/bootstrap`:
 
 ```
 project-root/
@@ -67,36 +66,31 @@ project-root/
 │   ├── session_context.md          # current state, open items
 │   ├── architectural_decisions.md  # WHY things are designed the way they are
 │   └── lessons_learned.md          # anti-patterns, failure modes, hard-won rules
-├── CLAUDE.md                       # add a Project Memory section pointing to diary/
-└── .claude/
-    ├── skills/
-    │   ├── startup/
-    │   │   └── SKILL.md            # reads 3 diary files, synthesizes briefing
-    │   ├── session-historian/
-    │   │   └── SKILL.md            # writes to diary files inline at session end
-    │   ├── grill-me/
-    │   │   └── SKILL.md            # interrogates a plan informed by project context
-    │   └── bootstrap/
-    │       └── SKILL.md            # populates diary on a freshly installed project
-    └── commands/
-        ├── startup.md              # /startup command
-        ├── session-historian.md    # /session-historian command
-        ├── grill-me.md             # /grill-me command
-        └── bootstrap.md            # /bootstrap command
+└── CLAUDE.md                       # gets a ## Project Memory section pointing to diary/
 ```
 
-The `diary/` files are the runtime artifacts. The `.claude/` files are the instructions that operate on them. The `templates/` directory in this repo contains ready-to-copy blank starters for the diary files.
-
-**Memtoad repo structure** (what you clone):
+**Memtoad plugin structure** (the repo):
 
 ```
-install.sh                            # smart entry point — detects new vs existing
-scripts/
-  install-new.sh                    # low-level primitive: new project
-  install-existing.sh               # low-level primitive: existing project
-templates/                          # skeleton starters for diary files
-.claude/skills/                     # installable SKILL.md files
-.claude/commands/                   # installable command wrappers
+memtoad/
+├── .claude-plugin/
+│   └── plugin.json                 # plugin manifest
+├── skills/
+│   ├── bootstrap/SKILL.md          # sets up + populates diary for a project
+│   ├── startup/SKILL.md            # reads 3 diary files, synthesizes a briefing
+│   ├── session-historian/SKILL.md  # writes diary entries at end of session
+│   ├── grill-me/SKILL.md           # interrogates a plan informed by project context
+│   ├── committer/SKILL.md          # documents session + commits atomically
+│   ├── context-capture/SKILL.md    # captures WIP state for context continuity
+│   └── list/SKILL.md               # lists all available memtoad commands
+└── commands/
+    ├── bootstrap.md
+    ├── startup.md
+    ├── session-historian.md
+    ├── grill-me.md
+    ├── committer.md
+    ├── context-capture.md
+    └── list.md
 ```
 
 ---
@@ -122,7 +116,7 @@ templates/                          # skeleton starters for diary files
 - Verification steps ("tests pass", "build green")
 - Commit hashes, dates, or file paths of changes (git has those)
 
-**Update rule**: Always rewritten by `/session-historian`. This is the one file that changes every session.
+**Update rule**: Always rewritten by `/session-historian` and `/committer`. This is the one file that changes every session.
 
 ---
 
@@ -183,11 +177,41 @@ A brief code snippet is acceptable only if it makes the lesson clearer.
 
 ## The skills
 
+### `bootstrap` — sets up and populates a project
+
+Run once in any project directory after installing the plugin. Bootstrap is the complete project initialization tool: it sets up the diary filesystem, injects the CLAUDE.md section, configures `.gitignore`, inspects the codebase and available docs, then conducts a targeted Q&A to surface what code inspection alone cannot reveal.
+
+**Phase 0 — Project setup** (idempotent, safe to re-run):
+1. Creates `diary/` with three starter files containing sentinel markers if not already present
+2. Injects `## Project Memory` section into CLAUDE.md (or creates CLAUDE.md) if not already present
+3. Asks which gitignore mode to use (Shared / Hybrid / Private) and configures `.gitignore`
+
+**Phase 1 — Inspect**: reads CLAUDE.md, README.md, package manifests, docs directory, and recent git log.
+
+**Phase 2 — Q&A**: three targeted questions about current state gaps, non-obvious architectural decisions, and hard-won lessons.
+
+**Phase 3 — Write**: populates all three diary files with first-draft entries. Removes sentinel markers from files it writes.
+
+The skill detects which files already have entries (via the `<!-- memtoad:uninitialized -->` sentinel) and skips or merges accordingly. Safe on partially-initialized diaries.
+
+**File**: `skills/bootstrap/SKILL.md`
+
+```markdown
+---
+name: bootstrap
+description: Set up Memtoad for a project and populate the diary. Creates diary/ directory and files, injects CLAUDE.md Project Memory section, configures .gitignore, then inspects the codebase and asks targeted questions to write first-draft diary entries. Run once after installing the plugin in a new project. Safe to re-run — idempotent setup, sentinel-based population.
+---
+```
+
+**When to invoke**: once, immediately after installing the plugin in any project.
+
+---
+
 ### `startup` — loads diary at session start
 
 Spawns a subagent to read all three diary files and synthesize a briefing. Runs from cold — the main conversation has no context yet, so spawning is appropriate here.
 
-**File**: `.claude/skills/startup/SKILL.md`
+**File**: `skills/startup/SKILL.md`
 
 ```markdown
 ---
@@ -208,7 +232,13 @@ Use the Agent tool to spawn the `startup` subagent with this prompt:
 
 Runs **inline in the main conversation** (no agent spawn). The main conversation already has full session context; spawning an agent to re-derive it is the expensive path.
 
-**File**: `.claude/skills/session-historian/SKILL.md`
+Supports two modes (decision logic handled by `/committer`):
+- **FULL** — updates all three files as appropriate; used for sessions with code changes or significant work
+- **LIGHTWEIGHT** — updates only `session_context.md`; used for documentation-only commits
+
+Direct `/session-historian` invocations always run FULL.
+
+**File**: `skills/session-historian/SKILL.md`
 
 ```markdown
 ---
@@ -252,259 +282,117 @@ Run the following **inline in the main conversation** (do not spawn an agent —
 - Most recent entries at the top in all three files
 - Cross-references use `(→ slug-name)` notation, not numbers
 - No archiving — files grow without rotation
-
-## Commit discipline
-
-Run session-historian *before* staging the commit, not after. The correct order:
-1. Run tests
-2. Run `/session-historian` — write diary entries
-3. Stage `diary/` alongside the code changes
-4. Commit everything together
-
-Do not reference the commit hash in diary entries; it isn't known yet when session-historian runs. The git log is the authoritative record of what changed and when.
 ```
 
-**When to invoke**: at the end of any session with meaningful work, or after a significant decision or discovery.
+**When to invoke**: directly at the end of any significant session; or via `/committer` which orchestrates the session-historian + commit flow.
+
+---
+
+### `committer` — documents session and commits atomically
+
+The preferred commit workflow. Checks what's staged, decides whether to run a FULL or LIGHTWEIGHT session-historian pass, stages diary changes, shows the final staged file list for confirmation, then spawns a subagent to craft and create the commit.
+
+**FULL** mode runs if any staged file has a code file extension (`.py`, `.ts`, `.js`, `.go`, `.rb`, `.java`, `.rs`, `.cs`, `.cpp`, `.c`, `.swift`, `.kt`) or if `commits_since_last_full ≥ 5` or last full run was more than 3 days ago.
+
+**LIGHTWEIGHT** mode runs for documentation-only commits (only `diary/`, `CLAUDE.md`, `.claude/`, or `.md` files staged).
+
+Both modes stage `diary/` changes as part of the commit. The user confirms the final staged file list before the commit is created.
+
+Maintains a state file at `~/.claude/projects/<project-path>/historian_state.json` to track FULL/LIGHTWEIGHT cadence.
+
+**File**: `skills/committer/SKILL.md`
+
+**When to invoke**: instead of running `/session-historian` + `git commit` manually. Tests should pass before invoking.
 
 ---
 
 ### `grill-me` — interrogates a plan using project context
 
-Interviews the user about a plan or design until reaching shared understanding. Uniquely, it reads the diary first — so the interrogation is grounded in current constraints, past decisions, and known failure modes before the first question is asked.
+Interviews the user about a plan or design until reaching shared understanding. Reads the diary first — so the interrogation is grounded in current constraints, past decisions, and known failure modes before the first question is asked.
 
 This is the key integration between the historian and the interviewer: grill-me can surface "we already made this decision" or "we learned this lesson the hard way" before the user has a chance to repeat a mistake.
 
-**File**: `.claude/skills/grill-me/SKILL.md`
+**File**: `skills/grill-me/SKILL.md`
 
 ```markdown
 ---
 name: grill-me
 description: Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each branch of the decision tree. Reads project diary first to surface relevant constraints. Use when user wants to stress-test a plan, get grilled on their design, or mentions "grill me".
 ---
-
-Interview the user relentlessly about every aspect of their plan until you reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one.
-
-## Phase 0: Load project context
-
-Before asking any questions, read these three files in order:
-1. `diary/architectural_decisions.md`
-2. `diary/lessons_learned.md`
-3. `diary/session_context.md`
-
-After reading, output 1–2 sentences naming any constraints, decisions, or patterns from the diary that are directly relevant to the stated task. This lets the user correct misreadings before the interrogation begins. If nothing in the diary bears on the task, skip this acknowledgment and proceed silently.
-
-## How to ask questions
-
-Use the **AskUserQuestion tool** for every question you ask. Never pose questions as plain text in your response — always use the multiple-choice popup so the user can quickly select an answer or type a custom one.
-
-Ask **one question at a time**. Wait for the user's answer before moving to the next question. This keeps the conversation focused and prevents overwhelm.
-
-For each question, provide 2–4 concrete multiple-choice options representing the most likely answers or directions. Think about what the user would realistically choose — generic options like "Yes" / "No" aren't helpful unless the question is genuinely binary. The user always has the "Other" field available to write something custom.
-
-## Flow
-
-1. After receiving an answer, briefly acknowledge the decision (1–2 sentences max), then immediately ask the next question via AskUserQuestion.
-2. If a question can be answered by exploring the codebase or files, explore them yourself instead of asking the user.
-3. Continue until all branches of the design tree are resolved.
-4. When finished, provide a concise summary of all decisions made.
 ```
 
 **When to invoke**: when stress-testing a plan, before starting a significant new feature, or when the user says "grill me on this."
 
 ---
 
-### `bootstrap` — populates the diary after installation
+### `context-capture` — preserves WIP state across context events
 
-Run once after installing Memtoad on an existing project (or a new project with some initial docs). Inspects the codebase and available documentation, then conducts a short targeted Q&A to surface what code inspection alone cannot reveal — the non-obvious decisions, the failure modes, the deferred work. Writes first-draft entries into all three diary files.
+Spawns a subagent to update `diary/session_context.md` with the current work-in-progress state. Use when Claude Code's context is about to be compressed, when switching tasks mid-session, or to checkpoint significant progress before it's lost.
 
-The skill detects which files need population by checking for a `<!-- memtoad:uninitialized -->` sentinel that the install templates include. Files that already have entries are left alone unless the user explicitly confirms merge mode.
-
-**File**: `.claude/skills/bootstrap/SKILL.md`
+**File**: `skills/context-capture/SKILL.md`
 
 ```markdown
 ---
-name: bootstrap
-description: Populate the diary from scratch on a project that just had Memtoad installed. Inspects existing code and docs, asks targeted questions about what the code can't reveal, then writes first-draft entries into all three diary files. Safe to run on partially-initialized diaries — detects which files need population via a sentinel marker.
+name: context-capture
+description: Capture current work-in-progress state to diary/session_context.md for continuity across compact events. Use after significant progress, before context might be lost, or to check what was previously being worked on.
 ---
-
-Populate the Memtoad diary for this project. Run **inline in the main conversation** (do not spawn an agent).
-
-## Phase 0: Detect state
-
-Read all three diary files:
-1. `diary/session_context.md`
-2. `diary/architectural_decisions.md`
-3. `diary/lessons_learned.md`
-
-For each file, check whether it contains `<!-- memtoad:uninitialized -->`. Build a list of which files are uninitialized (sentinel present) vs. already populated (no sentinel).
-
-- **All uninitialized**: proceed to Phase 1 without prompting.
-- **Some uninitialized, some not**: note which files already have entries. Proceed to populate only the uninitialized ones.
-- **All initialized**: use the **AskUserQuestion** tool to ask the user whether to proceed in merge mode (add new entries without overwriting existing ones) or abort. If they choose to abort, stop here.
-
-## Phase 1: Inspect codebase
-
-Read whatever exists, in this order (skip any not present):
-1. `CLAUDE.md`
-2. `README.md`
-3. Package manifest — whichever is present: `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pom.xml`, `Gemfile`, `Makefile`
-4. Up to 5 files in `docs/` or `doc/`
-
-Also run: `git log --oneline -30` to understand project history and timeline (if not a git repo, skip).
-
-After reading, form an internal picture of what the project does, its stack, its maturity, and any decisions or patterns visible in the code or docs. Do not output anything to the user yet — this phase is silent.
-
-## Phase 2: Targeted Q&A
-
-Ask the user questions to surface what code inspection alone cannot reveal. Ask **one at a time** and wait for each answer before proceeding.
-
-For binary or categorical choices, use the **AskUserQuestion** tool. For follow-up questions that need free-form description, ask as plain text.
-
-**Q1 — Current state gaps** (informs `session_context.md`):
-
-Use AskUserQuestion:
-> "I've read the available docs. Is there anything about the current project state not captured there?"
-
-Options:
-- "Nothing to add — docs reflect current state"
-- "There's active in-progress work to note"
-- "There are known blockers or deferred items"
-- Other (custom)
-
-If the user indicates there's something to capture, ask as plain text: "Briefly describe what's in-progress or deferred — enough that you could pick it back up without re-reading the full history."
-
-**Q2 — Architectural decisions** (informs `architectural_decisions.md`):
-
-Use AskUserQuestion:
-> "Are there non-obvious design decisions on this project that aren't captured in the docs — choices a new engineer would be surprised by?"
-
-Options:
-- "Yes — there are decisions worth capturing"
-- "Not yet — project is too early"
-- "Already in the docs you read"
-- Other (custom)
-
-If yes, ask as plain text: "Describe the key decision: what was chosen, what was the alternative, and what constraint or failure mode drove the choice?"
-
-**Q3 — Lessons learned** (informs `lessons_learned.md`):
-
-Use AskUserQuestion:
-> "Are there failure modes, anti-patterns, or hard-won rules specific to this project — things that aren't obvious from the code?"
-
-Options:
-- "Yes — there are lessons worth capturing"
-- "Not yet — too early to have hard-won lessons"
-- "Already in the docs you read"
-- Other (custom)
-
-If yes, ask as plain text: "Describe what happened and what the one-sentence rule would be for a future engineer."
-
-## Phase 3: Write diary files
-
-Write or update each file that is uninitialized (or confirmed for merge in Phase 0). Remove `<!-- memtoad:uninitialized -->` from every file you write.
-
-**`diary/session_context.md`**:
-- **Current State**: one paragraph synthesizing Phase 1 findings plus any gaps the user named in Q1. Describe what the system is, its production status, key tech facts.
-- **Most Recent Sessions**: leave empty — this is populated by `/session-historian` going forward.
-- **Open Items**: populate from any deferred work found in existing docs, plus anything the user described in Q1.
-- **Key Diary Files**: standard links to the other two files.
-- Update the `[Date]` placeholder with today's date if still present.
-
-**`diary/architectural_decisions.md`**:
-- If decisions were found in docs (Phase 1) or the user described one (Q2): write entries using `## slug-based-header (Month YYYY)` format. One sentence stating the decision, then a **Why** section for the reasoning.
-- If no decisions exist yet: write a single minimal entry noting when the diary was initialized, to be expanded as decisions are made.
-- Remove `<!-- memtoad:uninitialized -->`.
-
-**`diary/lessons_learned.md`**:
-- If the user described lessons in Q3: write entries using `## slug-based-header (Month YYYY)` format with a **Rule** and **Why** section.
-- If no lessons yet: leave the file with just the header (no entries) and remove only the sentinel.
-- Remove `<!-- memtoad:uninitialized -->`.
-
-After writing all files, output a brief summary: which files were written, how many entries were added to each, and remind the user to run `/startup` to verify the briefing reads coherently.
 ```
 
-**When to invoke**: once, immediately after `install.sh` runs on an existing project. For new projects, run it after writing the first few lines of a README or CLAUDE.md so the skill has something to inspect.
+**When to invoke**: proactively after significant progress, or reactively when context compression is expected.
+
+---
+
+### `list` — shows available commands
+
+Lists all Memtoad slash commands with one-line descriptions. Useful when you can't remember what's available.
+
+**File**: `skills/list/SKILL.md`
+
+**When to invoke**: any time you want to see what Memtoad commands are available.
 
 ---
 
 ## Command wrappers
 
-Install these in `.claude/commands/` to enable `/startup`, `/session-historian`, `/grill-me`, and `/bootstrap` as slash commands.
+Each skill has a corresponding command wrapper in `commands/` that enables it as a slash command. The wrappers are intentionally thin — they exist to expose the skill via the `/command-name` interface, not to duplicate the skill logic.
 
-**`.claude/commands/startup.md`**:
-
-```markdown
----
-description: Load full project context at session start — architecture, decisions, current state
----
-
-Use the Agent tool to spawn the `startup` subagent with this prompt:
-
-"Load full project context. Read diary/architectural_decisions.md, diary/lessons_learned.md, and diary/session_context.md in order. Synthesize the current state, active priorities, and any open questions, then report a concise briefing."
-```
-
-**`.claude/commands/session-historian.md`**:
-
-```markdown
----
-description: Document session accomplishments, decisions, and lessons to diary (runs inline)
----
-
-Run the session-historian skill inline. Do not spawn an agent. You already have full session context.
-
-Review what was accomplished this session. Then:
-- Always rewrite diary/session_context.md with the current state.
-- Only if a new architectural decision was made: append to diary/architectural_decisions.md.
-- Only if a new lesson was learned: append to diary/lessons_learned.md.
-```
-
-**`.claude/commands/grill-me.md`**:
-
-```markdown
----
-description: Stress-test a plan or design — reads project diary first, then interrogates relentlessly
----
-
-Invoke the grill-me skill. First read all three files in diary/ to load project context and surface relevant constraints. Then interview me about my plan or design using the AskUserQuestion tool, one question at a time, until all branches of the decision tree are resolved.
-```
-
-**`.claude/commands/bootstrap.md`**:
-
-```markdown
----
-description: Populate diary files from scratch — inspects codebase, asks targeted questions, writes first-draft entries
----
-
-Invoke the bootstrap skill. Check diary files for the uninitialized sentinel, inspect the codebase and docs, ask targeted questions about what the code can't reveal, then write first-draft entries into all three diary files. Safe on partially-initialized diaries — only writes to files that still contain the sentinel (or are confirmed for merge).
-```
+| Command | What it does |
+|---|---|
+| `/bootstrap` | Set up + populate diary for this project |
+| `/startup` | Load full project context at session start |
+| `/committer` | Update diary + commit atomically |
+| `/session-historian` | Write diary entries for the current session |
+| `/grill-me` | Stress-test a plan with diary-informed questions |
+| `/context-capture` | Checkpoint WIP state to the diary |
+| `/list` | Show all available Memtoad commands |
 
 ---
 
 ## CLAUDE.md integration
 
-Add this block near the top of the root `CLAUDE.md` in any target project:
+Bootstrap injects this block near the top of the root `CLAUDE.md` in any target project:
 
 ```markdown
 ## Project Memory
+<!-- memtoad:version:2 -->
+- [diary/session_context.md](diary/session_context.md) — current state and recent work
+- [diary/architectural_decisions.md](diary/architectural_decisions.md) — design principles and non-negotiable patterns
+- [diary/lessons_learned.md](diary/lessons_learned.md) — anti-patterns and hard-won insights
 
-Cross-project decisions, lessons, and current work live in [`diary/`](diary/):
-- [`diary/session_context.md`](diary/session_context.md) — current state and recent work
-- [`diary/architectural_decisions.md`](diary/architectural_decisions.md) — design principles and non-negotiable patterns
-- [`diary/lessons_learned.md`](diary/lessons_learned.md) — anti-patterns and hard-won insights
-
-**Before making any git commit**, always run `/session-historian` first to update the diary with what was accomplished. The diary is the primary context source for future sessions and for `/grill-me` — skipping this step means the next session starts blind.
+**Before any git commit**, run `/committer` — it updates the diary and crafts the commit message in one step.
 
 Commit workflow:
 1. Tests pass
-2. `/session-historian` — update diary
-3. `git commit` — with a message informed by what `/session-historian` recorded
+2. `/committer` — updates diary + commits
 ```
 
-For component-level `CLAUDE.md` files (inside a subdirectory like `frontend/` or `api/`), use relative paths:
+The `<!-- memtoad:version:2 -->` marker allows future bootstrap runs to detect and offer to refresh stale sections.
+
+For component-level `CLAUDE.md` files (inside a subdirectory like `frontend/` or `api/`), use relative paths for the diary links:
 
 ```markdown
 ## Project Memory
-
+<!-- memtoad:version:2 -->
 - [diary/session_context.md](../diary/session_context.md) — current state and recent work
 - [diary/architectural_decisions.md](../diary/architectural_decisions.md) — design principles and non-negotiable patterns
 - [diary/lessons_learned.md](../diary/lessons_learned.md) — anti-patterns and hard-won insights
@@ -512,74 +400,9 @@ For component-level `CLAUDE.md` files (inside a subdirectory like `frontend/` or
 
 ---
 
-## Init: new project
+## Diary file templates
 
-For a project with no existing documentation or captured decisions.
-
-**Quick path**: `install.sh /path/to/your/project` — detects the project type, runs steps 1–4 automatically (creates diary, installs skills, updates CLAUDE.md, configures `.gitignore`), then prompts you to run `/bootstrap`. Step 6 (verify) remains manual.
-
-**Manual steps**:
-
-1. **Create the diary directory and copy the skeleton files from `templates/`**:
-   ```bash
-   mkdir -p diary
-   cp path/to/memtoad/templates/*.md diary/
-   ```
-   Edit each file to replace `[Project Name]` and `[Date]`.
-
-2. **Install the skills**:
-   ```bash
-   mkdir -p .claude/skills/startup .claude/skills/session-historian .claude/skills/grill-me .claude/skills/bootstrap .claude/commands
-   ```
-   Copy `SKILL.md` for each skill from the `.claude/skills/` directory of this repo.
-   Copy the four command wrappers from `.claude/commands/` of this repo.
-
-3. **Add the Project Memory section to your root `CLAUDE.md`** (create it if it doesn't exist).
-
-4. **Configure git tracking** — add a Memtoad section to `.gitignore`. Choose a mode:
-   - **Shared**: track all diary files (solo project or single active contributor)
-   - **Hybrid**: track `architectural_decisions.md` + `lessons_learned.md`, ignore `session_context.md` (recommended for teams)
-   - **Private**: ignore entire `diary/` and `CLAUDE.md` (each contributor manages their own diary locally; CLAUDE.md is also ignored so Memtoad workflow instructions aren't pushed to teammates who may not have Memtoad installed)
-
-5. **Run `/bootstrap`** — open Claude Code in the project directory and run `/bootstrap`. This inspects the codebase, asks targeted questions about what the code can't reveal, and writes first-draft diary entries.
-
-6. **Verify**: run `/startup` to confirm Claude can load and synthesize the diary into a coherent briefing.
-
----
-
-## Init: existing project
-
-For a project with existing documentation, past decisions, and accumulated knowledge. The challenge here is that existing docs may be scattered — README files, design docs, inline comments, old ADRs. This is a distillation exercise, not a copy exercise.
-
-**Quick path**: `install.sh /path/to/your/project` — detects existing code, runs steps 1–4 automatically (creates diary, installs skills, updates CLAUDE.md, configures `.gitignore`), auto-discovers doc files (`README.md`, `CLAUDE.md`, `docs/`), and writes `MEMTOAD_INIT.md` with the `/bootstrap` prompt and post-bootstrap steps. Steps 5–7 remain manual.
-
-**Manual steps**:
-
-1. **Create the diary directory and copy skeleton files** (same as new project, step 1).
-
-2. **Install the skills and commands** (same as new project, step 2).
-
-3. **Add the Project Memory section to `CLAUDE.md`** (same as new project, step 3).
-
-4. **Configure git tracking** (same as new project, step 4).
-
-5. **Run `/bootstrap`** — open Claude Code in the project directory and run `/bootstrap`. The skill auto-detects your docs, reads the codebase, asks targeted questions about decisions and lessons that aren't in the docs, then writes first-draft entries into all three diary files.
-
-6. **Prune**: read all three files yourself. Remove:
-   - Anything obvious from the code or standard in the framework
-   - Anything already enforced by tests, linters, or CI
-   - Any entry whose WHY section is "because we always do it this way"
-   - Any entry without a specific incident or reasoning behind it
-
-7. **Run `/startup`** to confirm the briefing makes sense and captures what a new contributor would actually need to know.
-
----
-
-## Skeleton templates
-
-These are the blank starters that `install.sh` and the install scripts copy into `diary/` and fill in automatically. They are also available in the `templates/` directory of this repo for manual installation.
-
----
+Bootstrap creates these files with sentinel markers when setting up a new project. They are embedded directly in `skills/bootstrap/SKILL.md`.
 
 ### `diary/session_context.md`
 
@@ -599,7 +422,7 @@ Not a feature list — a snapshot of where things stand right now.]
 
 ## Most Recent Sessions
 
-[Entries added here by /session-historian. Most recent first.
+[Entries added here by /committer or /session-historian. Most recent first.
 Each entry: date, what was done (WHY-focused), any cross-refs to lessons or decisions.]
 
 ---
@@ -618,8 +441,6 @@ Each entry: date, what was done (WHY-focused), any cross-refs to lessons or deci
 <!-- memtoad:uninitialized -->
 ```
 
----
-
 ### `diary/architectural_decisions.md`
 
 ```markdown
@@ -636,10 +457,6 @@ Most recent decisions at top. No archiving.
 <!-- memtoad:uninitialized -->
 ```
 
-*(The `<!-- memtoad:uninitialized -->` sentinel tells `/bootstrap` that this file needs population. It is removed when the first entries are written.)*
-
----
-
 ### `diary/lessons_learned.md`
 
 ```markdown
@@ -655,11 +472,9 @@ Cross-references use (→ slug-name) notation.
 <!-- memtoad:uninitialized -->
 ```
 
-*(Sentinel removed when the first entries are written, or when `/bootstrap` determines there are no lessons to capture yet.)*
-
 ---
 
-## Design principles for Memtoad itself
+## Design principles
 
 These constrain how the system evolves. If you fork or extend it, respect them.
 
@@ -667,12 +482,14 @@ These constrain how the system evolves. If you fork or extend it, respect them.
 
 **Three files, no more.** The archive explosion that Memtoad was designed to replace happened because files multiplied without bound. Resist the urge to add a fourth file for bugs, a fifth for refactoring history. Bugs worth remembering become lessons. Refactors worth remembering become decisions. If it doesn't fit the three files, it probably doesn't belong in the diary.
 
-**Inline, not spawned — except startup.** The session-historian runs in the main conversation, which already has the session context. Spawning an agent to re-derive context you already have is the expensive path. The startup skill spawns because it genuinely starts cold with no session context. Grill-me runs inline because it needs the interactive AskUserQuestion tool, which agents cannot use.
+**Inline, not spawned — except startup and context-capture.** Session-historian and committer run in the main conversation, which already has session context. Spawning an agent to re-derive context you already have is the expensive path. Startup spawns because it genuinely starts cold. Context-capture spawns to snapshot state independently of the current conversation thread. Grill-me runs inline because it needs AskUserQuestion, which agents cannot use.
 
 **No archiving.** The old system archived files when they grew large. Modern context windows make this obsolete, and archived files are never read. Let the files grow.
 
 **Conditional writes.** Session-historian always updates `session_context.md`. It only touches the other two files when something genuinely new was decided or learned. Most sessions produce only one update.
 
-**Documentation commits with the code, not after.** Run `/session-historian` before staging the commit. Stage `diary/` alongside the code changes. Commit everything together. Do not reference the commit hash in diary entries — it isn't known yet, and git log is the authoritative record.
+**Commit with the code, not after.** Use `/committer` — it handles the diary update and commit together. Stage `diary/` alongside the code changes. Do not reference the commit hash in diary entries — it isn't known yet, and git log is the authoritative record.
 
 **Slugs, not numbers.** Numbered lessons rot when you reorder or delete entries. Slugs are self-describing and survive restructuring. `(→ null-key-defers-failure)` tells you what it is; `(→ Lesson 228)` tells you nothing.
+
+**Plugin, not installed.** Skills are firmware — they should improve without requiring per-project updates. The plugin architecture delivers skills globally; only the `diary/` files are per-project. When Memtoad improves, update the plugin once and all projects benefit.
