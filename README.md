@@ -184,7 +184,10 @@ Run once in any project directory after installing the plugin. Bootstrap is the 
 **Phase 0 — Project setup** (idempotent, safe to re-run):
 1. Creates `diary/` with three starter files containing sentinel markers if not already present
 2. Injects `## Project Memory` section into CLAUDE.md (or creates CLAUDE.md) if not already present
-3. Asks which gitignore mode to use (Shared / Hybrid / Private) and configures `.gitignore`
+3. Asks which gitignore mode to use and configures `.gitignore`:
+   - **Shared** — all diary files tracked; best for solo projects
+   - **Hybrid** — tracks decisions + lessons, ignores `session_context.md`; recommended for teams
+   - **Private** — ignores entire `diary/` and `CLAUDE.md`; each contributor manages diary locally
 
 **Phase 1 — Inspect**: reads CLAUDE.md, README.md, package manifests, docs directory, and recent git log.
 
@@ -292,7 +295,7 @@ Run the following **inline in the main conversation** (do not spawn an agent —
 
 The preferred commit workflow. Checks what's staged, decides whether to run a FULL or LIGHTWEIGHT session-historian pass, stages diary changes, shows the final staged file list for confirmation, then spawns a subagent to craft and create the commit.
 
-**FULL** mode runs if any staged file has a code file extension (`.py`, `.ts`, `.js`, `.go`, `.rb`, `.java`, `.rs`, `.cs`, `.cpp`, `.c`, `.swift`, `.kt`) or if `commits_since_last_full ≥ 5` or last full run was more than 3 days ago.
+**FULL** mode runs if any staged file has a code file extension (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rb`, `.java`, `.rs`, `.cs`, `.cpp`, `.c`, `.swift`, `.kt`, `.sh`, `.bash`), if any staged file has added or deleted status (`A` or `D`), if `commits_since_last_full ≥ 5`, or if the last full run was more than 3 days ago.
 
 **LIGHTWEIGHT** mode runs for documentation-only commits (only `diary/`, `CLAUDE.md`, `.claude/`, or `.md` files staged).
 
@@ -308,7 +311,9 @@ Maintains a state file at `~/.claude/projects/<project-path>/historian_state.jso
 
 ### `grill-me` — interrogates a plan using project context
 
-Interviews the user about a plan or design until reaching shared understanding. Reads the diary first — so the interrogation is grounded in current constraints, past decisions, and known failure modes before the first question is asked.
+Interviews the user about a plan or design until reaching shared understanding. Reads all three diary files first, then outputs 1–2 sentences naming any constraints, decisions, or patterns directly relevant to the stated task — letting the user correct misreadings before the interrogation begins. If nothing in the diary bears on the task, it skips this acknowledgment and proceeds silently.
+
+Uses `AskUserQuestion` for every question (not just binary choices), with 2–4 concrete multiple-choice options per question. Asks one question at a time and waits for the answer before proceeding.
 
 This is the key integration between the historian and the interviewer: grill-me can surface "we already made this decision" or "we learned this lesson the hard way" before the user has a chance to repeat a mistake.
 
