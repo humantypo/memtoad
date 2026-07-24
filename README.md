@@ -30,13 +30,14 @@ Claude is Frog. The diary is Toad's list.
 
 ## Installation
 
-Memtoad is a Claude Code plugin. Install it once and it's available in every project.
+Memtoad is a Claude Code plugin, distributed via its own marketplace manifest (`.claude-plugin/marketplace.json`). Install it once and it's available in every project. It's a two-step process: register the marketplace, then install the plugin from it.
 
 ```
-/plugin install github:humantypo/memtoad
+/plugin marketplace add humantypo/memtoad
+/plugin install memtoad@memtoad
 ```
 
-**That's it.** No shell scripts, no per-project file copying. Skills and commands are available globally in all Claude Code sessions once the plugin is installed.
+No shell scripts, no per-project file copying. Skills and commands are available globally in all Claude Code sessions once the plugin is installed.
 
 ### Set up a new project
 
