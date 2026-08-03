@@ -7,6 +7,14 @@ Cross-references use (→ slug-name) notation.
 
 ---
 
+## plugin-installs-are-pinned-not-live (August 2026)
+
+**Rule**: Never describe pushing to GitHub as updating already-installed copies of the plugin. Each install is pinned to a `version` + `gitCommitSha` in `~/.claude/plugins/installed_plugins.json`, and the code actually read at runtime is a cached copy under `~/.claude/plugins/cache/`. Propagating a change requires `claude plugin marketplace update` then `claude plugin update` per machine, followed by a restart.
+
+**Why**: It's easy to assume the plugin model behaves like a live symlink to the GitHub repo, especially since the whole point of the plugin conversion (→ plugin-not-installed) was to kill the "frozen firmware" problem of copy-in-project installs. It's a real improvement — one update command per machine instead of a re-install per project — but it is not automatic, and documentation or user-facing claims that imply push-to-deploy would be wrong.
+
+---
+
 ## install-script-is-the-last-enforcement-point (June 2026)
 
 **Rule**: Any workflow step that must happen before every commit belongs in CLAUDE.md — written there by the install script, not just documented in the README.

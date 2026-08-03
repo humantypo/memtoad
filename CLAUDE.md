@@ -26,6 +26,7 @@ skills/
   grill-me/SKILL.md                   — plan interrogator
   committer/SKILL.md                  — session-historian + commit orchestrator
   context-capture/SKILL.md            — WIP state snapshot
+  skill-inventory/SKILL.md            — skill/plugin audit
   list/SKILL.md                       — command listing
 commands/
   bootstrap.md / startup.md / ...     — slash command wrappers

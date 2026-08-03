@@ -1,6 +1,6 @@
 # Memtoad
 
-Persistent, readable project memory for Claude Code. Three markdown files. Seven skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
+Persistent, readable project memory for Claude Code. Three markdown files. Eight skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
 
 ---
 
@@ -76,6 +76,7 @@ memtoad/
 │   ├── grill-me/SKILL.md           # interrogates a plan informed by project context
 │   ├── committer/SKILL.md          # documents session + commits atomically
 │   ├── context-capture/SKILL.md    # captures WIP state for context continuity
+│   ├── skill-inventory/SKILL.md    # audits all visible skills — local, plugin, built-in
 │   └── list/SKILL.md               # lists all available memtoad commands
 └── commands/
     ├── bootstrap.md
@@ -84,6 +85,7 @@ memtoad/
     ├── grill-me.md
     ├── committer.md
     ├── context-capture.md
+    ├── skill-inventory.md
     └── list.md
 ```
 
@@ -341,6 +343,29 @@ description: Capture current work-in-progress state to diary/session_context.md 
 
 ---
 
+### `skill-inventory` — audits every visible skill
+
+Spawns a subagent to sweep the current environment for skills — this project's own skills, skills from installed plugins (resolved via `~/.claude/plugins/installed_plugins.json` and their cached `skills/*/SKILL.md` files), and provider built-ins that have no backing file (`/compact`, `/clear`, etc.). Runs as a spawn for the same reason `startup` does: it's a cold filesystem sweep unrelated to the conversation so far, and doing the file reading inline would burn the main context window for no benefit.
+
+Classifies every skill found as **local**, **plugin** (with plugin name, version, commit, and whether the marketplace has moved past that commit), or **built-in**, then reports:
+
+- an inventory table of everything found
+- what's new since the last run (see state file below)
+- overlapping skills that cover the same ground
+- gaps against a fixed software-development-lifecycle checklist (planning, coding, testing, code review, security review, docs, dependency management, deployment, incident response, memory/context continuity)
+- hard stops (unconditional gating language, e.g. "always ask before...") vs soft stops (gating conditional on mode, settings, or staged files)
+- each skill's tool/permission footprint, from `allowed-tools:` frontmatter when present or a best-effort text scan otherwise
+- a composition graph of which skills invoke other skills or subagents
+- staleness — plugins with an available update, or local skill files referencing paths that no longer exist
+
+Tracks first/last-seen dates and a description hash per skill in a state file at `~/.claude/projects/<project-path>/skill_inventory_state.json` — the same per-project path convention `committer` uses for `historian_state.json`. This is bookkeeping, not diary content, so it lives outside `diary/` entirely.
+
+**File**: `skills/skill-inventory/SKILL.md`
+
+**When to invoke**: on demand, when auditing skills/plugins or checking what's new since the last audit. Never runs automatically at session start.
+
+---
+
 ### `list` — shows available commands
 
 Lists all Memtoad slash commands with one-line descriptions. Useful when you can't remember what's available.
@@ -363,6 +388,7 @@ Each skill has a corresponding command wrapper in `commands/` that enables it as
 | `/session-historian` | Write diary entries for the current session |
 | `/grill-me` | Stress-test a plan with diary-informed questions |
 | `/context-capture` | Checkpoint WIP state to the diary |
+| `/skill-inventory` | Audit all visible skills — local, plugin, built-in |
 | `/list` | Show all available Memtoad commands |
 
 ---
@@ -481,7 +507,7 @@ These constrain how the system evolves. If you fork or extend it, respect them.
 
 **Three files, no more.** The archive explosion that Memtoad was designed to replace happened because files multiplied without bound. Resist the urge to add a fourth file for bugs, a fifth for refactoring history. Bugs worth remembering become lessons. Refactors worth remembering become decisions. If it doesn't fit the three files, it probably doesn't belong in the diary.
 
-**Inline, not spawned — except startup and context-capture.** Session-historian and committer run in the main conversation, which already has session context. Spawning an agent to re-derive context you already have is the expensive path. Startup spawns because it genuinely starts cold. Context-capture spawns to snapshot state independently of the current conversation thread. Grill-me runs inline because it needs AskUserQuestion, which agents cannot use.
+**Inline, not spawned — except startup, context-capture, and skill-inventory.** Session-historian and committer run in the main conversation, which already has session context. Spawning an agent to re-derive context you already have is the expensive path. Startup spawns because it genuinely starts cold. Context-capture spawns to snapshot state independently of the current conversation thread. Skill-inventory spawns for the same reason as startup — it's a cold sweep over plugin caches and marketplace clones that has nothing to do with the conversation so far, and doing that reading inline would waste the main context window. Grill-me runs inline because it needs AskUserQuestion, which agents cannot use.
 
 **No archiving.** The old system archived files when they grew large. Modern context windows make this obsolete, and archived files are never read. Let the files grow.
 

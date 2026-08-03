@@ -14,6 +14,7 @@ Available Memtoad commands
   /session-historian  Write diary entries for the current session (runs inline)
   /grill-me           Stress-test a plan with diary-informed questions
   /context-capture    Checkpoint current WIP state to the diary
+  /skill-inventory    Audit all visible skills — local, plugin, built-in
   /list               Show this list
 ────────────────────────────────────────
 Type /command-name to invoke. Skills are provided by the Memtoad plugin.

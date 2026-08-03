@@ -8,6 +8,14 @@ Most recent decisions at top. No archiving.
 
 ---
 
+## skill-inventory-spawns-like-startup (August 2026)
+
+`skill-inventory` spawns a subagent rather than running inline, joining `startup` and `context-capture` as exceptions to the "inline, not spawned" default.
+
+**Why**: The inline-by-default rule exists because `session-historian` and `committer` benefit from context already present in the main conversation — spawning would mean expensively re-deriving it. `skill-inventory` has the opposite shape: it's a cold sweep over `~/.claude/plugins/installed_plugins.json`, cached plugin `SKILL.md` files, and marketplace git clones that has no relationship to the current conversation. Running it inline would spend the main context window on file contents nobody in the conversation needs to see. This mirrors exactly why `startup` spawns — the task starts cold regardless of what came before it.
+
+---
+
 ## committer-owns-commit-discipline (June 2026)
 
 The `committer` skill owns the session-historian invocation and commit workflow; `session-historian` no longer instructs users to run it before committing.
