@@ -9,7 +9,7 @@ Cross-references use (→ slug-name) notation.
 
 ## plugin-installs-are-pinned-not-live (August 2026)
 
-**Rule**: Never describe pushing to GitHub as updating already-installed copies of the plugin. Each install is pinned to a `version` + `gitCommitSha` in `~/.claude/plugins/installed_plugins.json`, and the code actually read at runtime is a cached copy under `~/.claude/plugins/cache/`. Propagating a change requires `claude plugin marketplace update` then `claude plugin update` per machine, followed by a restart.
+**Rule**: Never describe pushing to GitHub as updating already-installed copies of the plugin. Each install is pinned to a `version` + `gitCommitSha` in `~/.claude/plugins/installed_plugins.json`, and the code actually read at runtime is a cached copy under `~/.claude/plugins/cache/`. Propagating a change requires `claude plugin marketplace update` then `claude plugin update` per machine, followed by a restart. Critically, `claude plugin update` gates on the `version` field in `.claude-plugin/plugin.json` changing — a content-only push with the version left unbumped will not be picked up as an available update, even though the commit sha moved. Bump the version (semver: new skill/feature = minor, fix = patch) as part of any commit that should actually reach installed copies.
 
 **Why**: It's easy to assume the plugin model behaves like a live symlink to the GitHub repo, especially since the whole point of the plugin conversion (→ plugin-not-installed) was to kill the "frozen firmware" problem of copy-in-project installs. It's a real improvement — one update command per machine instead of a re-install per project — but it is not automatic, and documentation or user-facing claims that imply push-to-deploy would be wrong.
 
