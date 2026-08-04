@@ -8,6 +8,14 @@ Most recent decisions at top. No archiving.
 
 ---
 
+## committer-diary-prep-only (August 2026)
+
+`committer` no longer drafts commit messages or runs `git commit`. It does Steps 1–3 only — assess FULL/LIGHTWEIGHT mode, update the diary, stage `diary/` — then stops. Enforcement that the diary gets staged before a commit moves to a plugin-shipped hook (`hooks/check-diary-staged.sh`, `PreToolUse` on `Bash`) that denies `git commit` until `diary/` has staged changes (or the commit is documentation-only). A companion `hooks/record-commit.sh` (`PostToolUse`) takes over the FULL/LIGHTWEIGHT cadence bookkeeping in `historian_state.json` that `committer`'s removed commit step used to write, keyed off the actual `git rev-parse HEAD` after a real commit lands rather than off `committer` itself creating one.
+
+This reverses (→ committer-owns-commit-discipline). **Why**: drafting and executing `git commit` was scope creep — every agent harness already knows how to commit unprompted, so that half of `committer` was redundant, dead weight relative to Memtoad's stated mission of capturing project *why*, not orchestrating git. Worse, the only thing that had been guaranteeing the diary got updated before a commit was an advisory line in each project's `CLAUDE.md` ("run `/committer` before committing") — easy to silently skip precisely because committing is a default behavior models reach for without being told. A plugin hook enforces the same guarantee at the harness level instead of at the model-compliance level, and (unlike CLAUDE.md instructions) it ships and updates with the plugin itself via `claude plugin update` — no per-project injection required.
+
+---
+
 ## skill-inventory-spawns-like-startup (August 2026)
 
 `skill-inventory` spawns a subagent rather than running inline, joining `startup` and `context-capture` as exceptions to the "inline, not spawned" default.

@@ -2,7 +2,7 @@
   "name": "memtoad",
   "owner": {
     "name": "humantypo",
-    "email": "bill@parducci.net"
+    "email": "bill+git@parducci.net"
   },
   "description": "Marketplace for Memtoad — persistent project memory for Claude Code (diary-based session continuity, architectural decisions, and lessons learned).",
   "plugins": [

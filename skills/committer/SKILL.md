@@ -1,9 +1,9 @@
 ---
 name: committer
-description: Document the current session via session-historian, review staged files, then commit atomically. Run after tests pass. Handles LIGHTWEIGHT vs FULL diary update automatically based on what is staged.
+description: Update the project diary before a commit — review staged files, determine LIGHTWEIGHT vs FULL session-historian mode based on what's staged, write the diary entry, and stage the diary changes. Does not create the commit; a plugin hook enforces that diary files are staged before `git commit` runs.
 ---
 
-Run the following steps **inline in the main conversation**. Do not spawn an agent until Step 5.
+Run the following steps **inline in the main conversation**. Never spawn an agent.
 
 ## Step 1 — Check working state
 
@@ -21,11 +21,13 @@ Display the current state to the user: which files are staged, which are modifie
 
 From Step 1's output, determine the mode.
 
-**Skip session-historian entirely** (go straight to Step 4) if every staged path is documentation-only:
+**Skip session-historian entirely** if every staged path is documentation-only:
 - `diary/`
 - `CLAUDE.md`
 - `.claude/` (skills, commands, agents)
 - Any `.md` file at the repo root
+
+In that case, tell the user the staged changes are documentation-only and no diary update is needed, then stop.
 
 Otherwise determine the historian state file path dynamically:
 ```bash
@@ -49,58 +51,11 @@ Run session-historian **inline** using the rules in the `session-historian` skil
 
 **FULL**: Update `diary/session_context.md`. Append to `diary/architectural_decisions.md` only if a new architectural decision was made. Append to `diary/lessons_learned.md` only if a new lesson was learned.
 
-Do not reference the commit hash in diary entries — it isn't known yet.
+Do not reference the commit hash in diary entries — it isn't known yet, and this skill does not create the commit.
 
-After writing, stage any diary changes:
+After writing, stage the diary changes:
 ```bash
 git add diary/
 ```
 
-## Step 4 — Review staged files and get confirmation
-
-Run:
-```bash
-git diff --cached --name-only
-git status --short
-```
-
-Show the user the final staged file list as plain text. Then use **AskUserQuestion** with these options:
-
-> "Ready to commit. What would you like to do?"
-
-- **Commit staged files** — proceed with exactly what is staged
-- **Stage all modified files too** — run `git add -u`, then proceed
-- **Cancel** — stop without committing
-
-If the user types specific file paths in the "Other" field, run `git add <those paths>` and proceed.
-
-## Step 5 — Commit
-
-Use the Agent tool to spawn a subagent with this prompt:
-
-"Commit the currently staged changes. Verify staged files exist with `git diff --cached --name-only`. Analyze what changed and why by reading the diff. Draft a concise commit message focused on the 'why' not the 'what'. Create the commit. Report the commit hash in your final output."
-
-Capture the commit hash from the subagent's output.
-
-## Step 6 — Update historian state file
-
-Compute the state file path:
-```bash
-STATE_FILE=~/.claude/projects/$(pwd | tr '/' '-' | sed 's/^-//')/historian_state.json
-```
-
-Read the current state (or use defaults if file doesn't exist), then write updated state:
-
-**After documentation-only commit (session-historian skipped)**: increment `commits_since_last_full` by 1, keep other fields unchanged.
-
-**After LIGHTWEIGHT**: increment `commits_since_last_full` by 1, keep `last_full_run_date` and `last_full_run_commit` unchanged.
-
-**After FULL**: write:
-```json
-{"last_full_run_commit": "<HASH>", "last_full_run_date": "<YYYY-MM-DD>", "commits_since_last_full": 0}
-```
-
-Ensure the parent directory exists before writing:
-```bash
-mkdir -p "$(dirname "$STATE_FILE")"
-```
+Report to the user that the diary is updated and staged. Do not commit — a plugin `PreToolUse` hook checks that `diary/` is staged before any `git commit` runs, and denies the commit with a pointer back to `/memtoad:committer` if it isn't. Once diary changes are staged, the user's normal commit flow (or the harness's own commit drafting) can proceed.

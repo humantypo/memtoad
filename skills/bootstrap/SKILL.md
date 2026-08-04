@@ -82,16 +82,12 @@ Read `CLAUDE.md` in the current directory (create it if it doesn't exist). If it
 
 ```
 ## Project Memory
-<!-- memtoad:version:2 -->
+<!-- memtoad:version:3 -->
 - [diary/session_context.md](diary/session_context.md) — current state and recent work
 - [diary/architectural_decisions.md](diary/architectural_decisions.md) — design principles and non-negotiable patterns
 - [diary/lessons_learned.md](diary/lessons_learned.md) — anti-patterns and hard-won insights
 
-**Before any git commit**, run `/committer` — it updates the diary and crafts the commit message in one step.
-
-Commit workflow:
-1. Tests pass
-2. `/committer` — updates diary + commits
+Commits that touch more than documentation are gated on `diary/` being staged — a plugin hook denies `git commit` otherwise. Run `/committer` first to update and stage the diary.
 
 ```
 

@@ -70,12 +70,16 @@ project-root/
 memtoad/
 ├── .claude-plugin/
 │   └── plugin.json                 # plugin manifest
+├── hooks/
+│   ├── hooks.json                  # registers the two hooks below
+│   ├── check-diary-staged.sh       # PreToolUse: denies `git commit` until diary/ is staged
+│   └── record-commit.sh            # PostToolUse: updates historian_state.json after a real commit
 ├── skills/
 │   ├── bootstrap/SKILL.md          # sets up + populates diary for a project
 │   ├── startup/SKILL.md            # reads 3 diary files, synthesizes a briefing
 │   ├── session-historian/SKILL.md  # writes diary entries at end of session
 │   ├── grill-me/SKILL.md           # interrogates a plan informed by project context
-│   ├── committer/SKILL.md          # documents session + commits atomically
+│   ├── committer/SKILL.md          # updates + stages the diary before a commit
 │   ├── context-capture/SKILL.md    # captures WIP state for context continuity
 │   ├── skill-inventory/SKILL.md    # audits all visible skills — local, plugin, built-in
 │   └── list/SKILL.md               # lists all available memtoad commands
@@ -284,25 +288,35 @@ Run the following **inline in the main conversation** (do not spawn an agent —
 - No archiving — files grow without rotation
 ```
 
-**When to invoke**: directly at the end of any significant session; or via `/committer` which orchestrates the session-historian + commit flow.
+**When to invoke**: directly at the end of any significant session; or via `/committer` which decides the mode for you before a commit.
 
 ---
 
-### `committer` — documents session and commits atomically
+### `committer` — updates and stages the diary before a commit
 
-The preferred commit workflow. Checks what's staged, decides whether to run a FULL or LIGHTWEIGHT session-historian pass, stages diary changes, shows the final staged file list for confirmation, then spawns a subagent to craft and create the commit.
+Checks what's staged, decides whether to run a FULL or LIGHTWEIGHT session-historian pass, updates the diary accordingly, and stages `diary/`. Runs inline, no agent spawn.
 
 **FULL** mode runs if any staged file has a code file extension (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rb`, `.java`, `.rs`, `.cs`, `.cpp`, `.c`, `.swift`, `.kt`, `.sh`, `.bash`), if any staged file has added or deleted status (`A` or `D`), if `commits_since_last_full ≥ 5`, or if the last full run was more than 3 days ago.
 
-**LIGHTWEIGHT** mode runs for documentation-only commits (only `diary/`, `CLAUDE.md`, `.claude/`, or `.md` files staged).
+**LIGHTWEIGHT** mode runs for documentation-only commits (only `diary/`, `CLAUDE.md`, `.claude/`, or `.md` files staged) — or skips the diary update entirely if every staged path is already documentation-only.
 
-Both modes stage `diary/` changes as part of the commit. The user confirms the final staged file list before the commit is created.
-
-Maintains a state file at `~/.claude/projects/<project-path>/historian_state.json` to track FULL/LIGHTWEIGHT cadence.
+`committer` does not draft a commit message or run `git commit` itself — that's redundant with what any agent harness already does unprompted. It stops once the diary is updated and staged. The `commits_since_last_full` / `last_full_run_date` state at `~/.claude/projects/<project-path>/historian_state.json` is now written by the `record-commit` hook (see below), not by `committer`, since `committer` no longer knows when — or whether — a commit actually happens.
 
 **File**: `skills/committer/SKILL.md`
 
-**When to invoke**: instead of running `/session-historian` + `git commit` manually. Tests should pass before invoking.
+**When to invoke**: before committing, when staged changes include more than documentation. Tests should pass before invoking.
+
+---
+
+### Hooks — enforcing the diary update at the harness level
+
+A CLAUDE.md instruction to "run `/committer` before committing" is advisory: committing is a default behavior agent harnesses already know how to do unprompted, so the instruction is easy to silently skip. Memtoad instead ships two hooks (`hooks/hooks.json`) that register automatically for every project with the plugin installed — no per-project setup, and they travel with `claude plugin update` exactly like skills do.
+
+**`check-diary-staged.sh`** (`PreToolUse`, matched on `Bash`): inspects any `git commit` invocation. If the project has no `diary/` directory, or every staged file is documentation-only, or `diary/` already has staged changes, it allows the commit silently. Otherwise it denies the commit with a reason pointing back to `/memtoad:committer`.
+
+**`record-commit.sh`** (`PostToolUse`, matched on `Bash`): after a `git commit` that actually created a new commit (detected by comparing `HEAD` against the last commit hash it saw), updates `historian_state.json` — incrementing `commits_since_last_full`, or resetting it and recording `last_full_run_commit`/`last_full_run_date` if the commit touched `diary/architectural_decisions.md`.
+
+Both scripts no-op immediately for any project without a `diary/` directory, so installing the plugin never gates commits in projects that haven't adopted Memtoad's diary convention.
 
 ---
 
@@ -385,7 +399,7 @@ Each skill has a corresponding command wrapper in `commands/` that enables it as
 |---|---|
 | `/bootstrap` | Set up + populate diary for this project |
 | `/startup` | Load full project context at session start |
-| `/committer` | Update diary + commit atomically |
+| `/committer` | Update + stage the diary before a commit |
 | `/session-historian` | Write diary entries for the current session |
 | `/grill-me` | Stress-test a plan with diary-informed questions |
 | `/context-capture` | Checkpoint WIP state to the diary |
@@ -400,25 +414,21 @@ Bootstrap injects this block near the top of the root `CLAUDE.md` in any target 
 
 ```markdown
 ## Project Memory
-<!-- memtoad:version:2 -->
+<!-- memtoad:version:3 -->
 - [diary/session_context.md](diary/session_context.md) — current state and recent work
 - [diary/architectural_decisions.md](diary/architectural_decisions.md) — design principles and non-negotiable patterns
 - [diary/lessons_learned.md](diary/lessons_learned.md) — anti-patterns and hard-won insights
 
-**Before any git commit**, run `/committer` — it updates the diary and crafts the commit message in one step.
-
-Commit workflow:
-1. Tests pass
-2. `/committer` — updates diary + commits
+Commits that touch more than documentation are gated on `diary/` being staged — a plugin hook denies `git commit` otherwise. Run `/committer` first to update and stage the diary.
 ```
 
-The `<!-- memtoad:version:2 -->` marker allows future bootstrap runs to detect and offer to refresh stale sections.
+The `<!-- memtoad:version:3 -->` marker allows future bootstrap runs to detect and offer to refresh stale sections.
 
 For component-level `CLAUDE.md` files (inside a subdirectory like `frontend/` or `api/`), use relative paths for the diary links:
 
 ```markdown
 ## Project Memory
-<!-- memtoad:version:2 -->
+<!-- memtoad:version:3 -->
 - [diary/session_context.md](../diary/session_context.md) — current state and recent work
 - [diary/architectural_decisions.md](../diary/architectural_decisions.md) — design principles and non-negotiable patterns
 - [diary/lessons_learned.md](../diary/lessons_learned.md) — anti-patterns and hard-won insights
@@ -514,7 +524,7 @@ These constrain how the system evolves. If you fork or extend it, respect them.
 
 **Conditional writes.** Session-historian always updates `session_context.md`. It only touches the other two files when something genuinely new was decided or learned. Most sessions produce only one update.
 
-**Commit with the code, not after.** Use `/committer` — it handles the diary update and commit together. Stage `diary/` alongside the code changes. Do not reference the commit hash in diary entries — it isn't known yet, and git log is the authoritative record.
+**Commit with the code, not after.** Use `/committer` to update and stage `diary/` before you commit — don't leave the diary for a follow-up commit. A plugin hook (`hooks/check-diary-staged.sh`) enforces this at the harness level rather than relying on a CLAUDE.md instruction the model might skip. Do not reference the commit hash in diary entries — it isn't known yet, and git log is the authoritative record.
 
 **Slugs, not numbers.** Numbered lessons rot when you reorder or delete entries. Slugs are self-describing and survive restructuring. `(→ null-key-defers-failure)` tells you what it is; `(→ Lesson 228)` tells you nothing.
 
