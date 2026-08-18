@@ -1,6 +1,6 @@
 # Memtoad
 
-Persistent, readable project memory for Claude Code. Three markdown files. Eight skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
+Persistent, readable project memory for Claude Code. Three markdown files. Nine skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
 
 ---
 
@@ -82,6 +82,7 @@ memtoad/
 │   ├── committer/SKILL.md          # updates + stages the diary before a commit
 │   ├── context-capture/SKILL.md    # captures WIP state for context continuity
 │   ├── skill-inventory/SKILL.md    # audits all visible skills — local, plugin, built-in
+│   ├── tidy/SKILL.md               # consolidates superseded architectural-decision entries
 │   └── list/SKILL.md               # lists all available memtoad commands
 └── commands/
     ├── bootstrap.md
@@ -91,6 +92,7 @@ memtoad/
     ├── committer.md
     ├── context-capture.md
     ├── skill-inventory.md
+    ├── tidy.md
     └── list.md
 ```
 
@@ -146,6 +148,7 @@ Optional: a brief code snippet only if it makes the WHY concrete.
 - Slug-based headers, not numbers (slugs survive reordering; numbers don't)
 - Most recent at top
 - Append-only — no archiving
+- Exception: `/tidy` may fold an entry and the entry it explicitly reverses (`This reverses (→ slug)`) into a single current entry. Nothing is deleted or archived — the older entry's reasoning is compressed into the merged entry's WHY, and its slug stays present as a `(supersedes slug)` header annotation so existing cross-references still resolve.
 
 ---
 
@@ -381,6 +384,20 @@ Tracks first/last-seen dates and a description hash per skill in a state file at
 
 ---
 
+### `tidy` — consolidates superseded architectural decisions
+
+Runs **inline in the main conversation** (no agent spawn) — the target file is small by design, and the merge decisions benefit from being visible to the user as they're made, not returned as a finished diff from a subagent.
+
+`architectural_decisions.md` and `lessons_learned.md` are deliberately append-only — archiving by date or size was tried once in a predecessor system and rejected, because archived content stopped being read (→ three-files-no-archiving, → archive-files-are-never-read). `tidy` doesn't reopen that decision. It solves a narrower problem: over time, a decision and its later reversal both stay in the file as two full entries, even though only the current one is operative. `tidy` scans for the explicit `This reverses (→ slug)` phrase, pairs each reversal with the entry it reverses, and — for pairs where the older slug isn't relied on elsewhere in the file — drafts a single merged entry that keeps the current decision as the operative text and compresses the older entry into one clause of the WHY, rather than dropping it. The older slug survives as a `(supersedes slug)` annotation on the merged header, so it stays literal, greppable text.
+
+It never merges on inferred topic similarity, never touches `lessons_learned.md` (no authored supersession convention exists there) or `session_context.md` (already fully rewritten every session), and never runs automatically. It shows every candidate pair as a before/after comparison and applies only the ones the user confirms, then leaves the change unstaged for normal review.
+
+**File**: `skills/tidy/SKILL.md`
+
+**When to invoke**: on demand, once a project's `architectural_decisions.md` has accumulated a few reversal pairs and is starting to feel repetitive to read in full.
+
+---
+
 ### `list` — shows available commands
 
 Lists all Memtoad slash commands with one-line descriptions. Useful when you can't remember what's available.
@@ -404,6 +421,7 @@ Each skill has a corresponding command wrapper in `commands/` that enables it as
 | `/grill-me` | Stress-test a plan with diary-informed questions |
 | `/context-capture` | Checkpoint WIP state to the diary |
 | `/skill-inventory` | Audit all visible skills — local, plugin, built-in |
+| `/tidy` | Consolidate superseded architectural-decision entries |
 | `/list` | Show all available Memtoad commands |
 
 ---

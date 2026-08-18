@@ -8,11 +8,19 @@ Most recent decisions at top. No archiving.
 
 ---
 
-## committer-diary-prep-only (August 2026)
+## tidy-consolidates-not-archives (August 2026)
+
+`tidy` is a ninth skill that merges an architectural-decision entry with the earlier entry it explicitly reverses (`This reverses (→ slug)`) into one entry, in place. It matches only that authored phrase — never topic similarity or entry age — skips any pair where the older slug is still referenced elsewhere in the file, drafts the merge, and requires explicit user confirmation per pair before writing anything. It runs inline, not spawned, and only ever touches `architectural_decisions.md`.
+
+**Why**: as the diary matures, `architectural_decisions.md` and `lessons_learned.md` are permanently append-only (→ three-files-no-archiving) — archiving by date or size was already tried once and rejected because archived content stopped being read (→ archive-files-are-never-read). That rules out pruning or rotating either file to control growth. But a decision-then-reversal pair is a case where two full entries describe one current fact, and collapsing them loses nothing — the reasoning arc survives compressed into a single WHY, and the old slug survives as a header annotation so nothing that referenced it goes stale. Scoping `tidy` to the explicit `reverses` phrase (rather than having it judge topical overlap) keeps it from ever guessing wrong about which entries are safe to fold; scoping it to `architectural_decisions.md` only reflects that `lessons_learned.md` has no equivalent supersession convention today. Inline execution (not spawned, unlike `skill-inventory`) is deliberate: the file it reads is small and bounded by design, and the merge is an editorial call the user should watch happen in the transcript, not receive as a finished diff from a subagent.
+
+---
+
+## committer-diary-prep-only (August 2026, supersedes committer-owns-commit-discipline)
 
 `committer` no longer drafts commit messages or runs `git commit`. It does Steps 1–3 only — assess FULL/LIGHTWEIGHT mode, update the diary, stage `diary/` — then stops. Enforcement that the diary gets staged before a commit moves to a plugin-shipped hook (`hooks/check-diary-staged.sh`, `PreToolUse` on `Bash`) that denies `git commit` until `diary/` has staged changes (or the commit is documentation-only). A companion `hooks/record-commit.sh` (`PostToolUse`) takes over the FULL/LIGHTWEIGHT cadence bookkeeping in `historian_state.json` that `committer`'s removed commit step used to write, keyed off the actual `git rev-parse HEAD` after a real commit lands rather than off `committer` itself creating one.
 
-This reverses (→ committer-owns-commit-discipline). **Why**: drafting and executing `git commit` was scope creep — every agent harness already knows how to commit unprompted, so that half of `committer` was redundant, dead weight relative to Memtoad's stated mission of capturing project *why*, not orchestrating git. Worse, the only thing that had been guaranteeing the diary got updated before a commit was an advisory line in each project's `CLAUDE.md` ("run `/committer` before committing") — easy to silently skip precisely because committing is a default behavior models reach for without being told. A plugin hook enforces the same guarantee at the harness level instead of at the model-compliance level, and (unlike CLAUDE.md instructions) it ships and updates with the plugin itself via `claude plugin update` — no per-project injection required.
+**Why**: drafting and executing `git commit` was scope creep — every agent harness already knows how to commit unprompted, so that half of `committer` was redundant, dead weight relative to Memtoad's stated mission of capturing project *why*, not orchestrating git. Worse, the only thing that had been guaranteeing the diary got updated before a commit was an advisory line in each project's `CLAUDE.md` ("run `/committer` before committing") — easy to silently skip precisely because committing is a default behavior models reach for without being told. A plugin hook enforces the same guarantee at the harness level instead of at the model-compliance level, and (unlike CLAUDE.md instructions) it ships and updates with the plugin itself via `claude plugin update` — no per-project injection required. Originally (June 2026) `committer` owned the full session-historian-then-commit workflow as a single atomic operation, because a two-command manual order (`/session-historian` then `git commit`) was easy for users to get wrong — but that problem turned out to be better solved by the hook than by folding commit execution into the skill.
 
 ---
 
@@ -21,14 +29,6 @@ This reverses (→ committer-owns-commit-discipline). **Why**: drafting and exec
 `skill-inventory` spawns a subagent rather than running inline, joining `startup` and `context-capture` as exceptions to the "inline, not spawned" default.
 
 **Why**: The inline-by-default rule exists because `session-historian` and `committer` benefit from context already present in the main conversation — spawning would mean expensively re-deriving it. `skill-inventory` has the opposite shape: it's a cold sweep over `~/.claude/plugins/installed_plugins.json`, cached plugin `SKILL.md` files, and marketplace git clones that has no relationship to the current conversation. Running it inline would spend the main context window on file contents nobody in the conversation needs to see. This mirrors exactly why `startup` spawns — the task starts cold regardless of what came before it.
-
----
-
-## committer-owns-commit-discipline (June 2026)
-
-The `committer` skill owns the session-historian invocation and commit workflow; `session-historian` no longer instructs users to run it before committing.
-
-**Why**: When `/session-historian` said "run me before every commit," users had to remember two commands in the right order. The `committer` skill makes the diary update and commit a single atomic operation — it calls session-historian internally, stages diary changes, confirms the file list, and commits. Session-historian invoked directly (outside a commit context) always runs FULL and is appropriate for mid-session documentation. The split removes the manual coordination burden while keeping both skills composable.
 
 ---
 

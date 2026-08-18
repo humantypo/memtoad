@@ -1,6 +1,6 @@
 {
   "name": "memtoad",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Persistent project memory for Claude Code — diary-based session continuity, architectural decisions, and lessons learned. Run /bootstrap to set up a new project, /startup to load context, /committer to document before committing.",
   "author": {
     "name": "humantypo",

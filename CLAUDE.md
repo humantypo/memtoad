@@ -27,6 +27,7 @@ skills/
   committer/SKILL.md                  — updates + stages diary before a commit
   context-capture/SKILL.md            — WIP state snapshot
   skill-inventory/SKILL.md            — skill/plugin audit
+  tidy/SKILL.md                       — consolidates superseded decision entries
   list/SKILL.md                       — command listing
 commands/
   bootstrap.md / startup.md / ...     — slash command wrappers

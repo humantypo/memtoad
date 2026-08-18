@@ -15,6 +15,7 @@ Available Memtoad commands
   /grill-me           Stress-test a plan with diary-informed questions
   /context-capture    Checkpoint current WIP state to the diary
   /skill-inventory    Audit all visible skills — local, plugin, built-in
+  /tidy               Consolidate superseded architectural-decision entries
   /list               Show this list
 ────────────────────────────────────────
 Type /command-name to invoke. Skills are provided by the Memtoad plugin.
