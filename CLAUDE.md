@@ -31,6 +31,9 @@ skills/
   list/SKILL.md                       — command listing
 commands/
   bootstrap.md / startup.md / ...     — slash command wrappers
+memstore/                             — optional Python package for enhanced memory (pip install from the git subdirectory)
+  src/memstore/                       — store (chroma, guards), diary adapter (ingest, compact, index), check-pointers, CLI
+  tests/                              — python -m pytest memstore/tests (stub embedder, no model download)
 diary/                                — this repo's own diary
 README.md                             — full documentation (the primary artifact)
 ```
@@ -42,3 +45,4 @@ README.md                             — full documentation (the primary artifa
 - Skills live in `skills/`, not `.claude/skills/` — the plugin system serves them globally.
 - Run `/committer` at the end of any session that changes the system design.
 - Do not add files beyond the documented structure without updating README.md.
+- A change to `memstore/` keeps its tests green and updates the README's enhanced-memory section in the same commit; the skills reach it only through the memstore command in a project's `<!-- memtoad:store -->` block.

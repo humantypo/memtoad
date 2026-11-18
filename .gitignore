@@ -1,4 +1,10 @@
 
+# Python (memstore package)
+__pycache__/
+*.egg-info/
+build/
+.pytest_cache/
+
 # OS / editor noise
 .DS_Store
 *.swp

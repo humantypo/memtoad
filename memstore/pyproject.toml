@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memstore"
+version = "0.2.0"
+description = "Optional chroma-backed archive for a Memtoad diary: Index and digests in the files, full entries one pointer away."
+requires-python = ">=3.12"
+dependencies = ["chromadb>=1.5"]
+
+[project.scripts]
+memstore = "memstore.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::PendingDeprecationWarning"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["memstore*"]

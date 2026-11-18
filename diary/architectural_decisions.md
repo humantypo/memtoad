@@ -8,6 +8,14 @@ Most recent decisions at top. No archiving.
 
 ---
 
+## optional-memstore-archive (November 17, 2026)
+
+Memtoad ships an optional Python package, `memstore/`, ported from the project it was built in, for diaries too big to read whole. It turns `architectural_decisions.md` and `lessons_learned.md` into a newest-first Index plus one-paragraph digests, with the exact full text of every entry in a chroma database tracked in git at `diary/memstore/`. It is opt-in through `/bootstrap` step 0d. A project is "on" only when its `CLAUDE.md` carries a `<!-- memtoad:store -->` block naming the project's memstore command. Every skill checks that block: without it nothing changes; with it and the package missing, the skill says so and stops. The package is installed into the project's own Python environment from this repository's `memstore/` subdirectory with `pip install git+...#subdirectory=memstore`, not from the plugin cache. The parser reads memtoad's own format only: in both files an entry is a `##` heading and any deeper heading is a sub-section of it; the originating project's `###`-lesson peers, month dividers and `Lesson N:` titles were deliberately not carried over.
+
+**Why**: in the originating project the two big files reached 560 KB and could no longer be read each session, which broke the premise of (→ three-files-no-archiving) without any rule being violated. The store keeps that decision's intent, nothing read-dead, because each entry's digest stays in the file every session reads and points at the exact text (→ archive-files-are-never-read is about files nobody opens; a digest is opened every time). An explicit sentinel, not the digest-region marker, decides "on": a freshly bootstrapped project has no digests yet but must already follow the store flow. The package cannot be installed from the plugin cache, because that path changes with every plugin version. Naming the command in `CLAUDE.md` means no skill assumes a Python environment.
+
+---
+
 ## tidy-consolidates-not-archives (August 2026)
 
 `tidy` is a ninth skill that merges an architectural-decision entry with the earlier entry it explicitly reverses (`This reverses (→ slug)`) into one entry, in place. It matches only that authored phrase — never topic similarity or entry age — skips any pair where the older slug is still referenced elsewhere in the file, drafts the merge, and requires explicit user confirmation per pair before writing anything. It runs inline, not spawned, and only ever touches `architectural_decisions.md`.

@@ -49,6 +49,10 @@ For each confirmed pair, replace both original entries with the single merged en
 
 Do not stage or commit the change. Tell the user to review with `git diff diary/architectural_decisions.md` and commit through the normal flow (or `/committer`) — this is an editorial change to diary content, not a session-historian write, and deserves the same review any diary edit gets.
 
+## With enhanced memory (`CLAUDE.md` contains `<!-- memtoad:store -->`)
+
+Act only on full entries below `<!-- memstore:digests:end -->`. An entry that has already been digested is archived in the store and is not edited here: list any `This reverses (→ slug)` pair that involves a digest to the user, and leave it. A merged full entry is then archived and digested by the normal `session-historian` steps (ingest, compact, check-pointers).
+
 ## What NOT to do
 
 - Do not touch `diary/lessons_learned.md` — it has no authored "supersedes" convention today. If one emerges later, that's a separate decision, not something `tidy` should infer on its own.

@@ -53,9 +53,13 @@ Run session-historian **inline** using the rules in the `session-historian` skil
 
 Do not reference the commit hash in diary entries — it isn't known yet, and this skill does not create the commit.
 
+With enhanced memory on (`CLAUDE.md` contains `<!-- memtoad:store -->`), session-historian also archives each new entry in the store and replaces it with its digest; `check-pointers` must report 0 errors before staging.
+
 After writing, stage the diary changes:
 ```bash
 git add diary/
 ```
+
+With enhanced memory this also stages `diary/memstore/`, the tracked store. That is intended: the store is the only full copy of compacted entries. (Any read of the store changes one counter row in its sqlite file, so it can show as modified after a mere `search`; staging it then is harmless.)
 
 Report to the user that the diary is updated and staged. Do not commit — a plugin `PreToolUse` hook checks that `diary/` is staged before any `git commit` runs, and denies the commit with a pointer back to `/memtoad:committer` if it isn't. Once diary changes are staged, the user's normal commit flow (or the harness's own commit drafting) can proceed.

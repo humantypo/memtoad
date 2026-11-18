@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: Set up Memtoad for a project and populate the diary. Creates diary/ directory and files, injects CLAUDE.md Project Memory section, configures .gitignore, then inspects the codebase and asks targeted questions to write first-draft diary entries. Run once after installing the plugin in a new project. Safe to re-run — idempotent setup, sentinel-based population.
+description: Set up Memtoad for a project and populate the diary. Creates diary/ directory and files, injects CLAUDE.md Project Memory section, configures .gitignore, optionally enables enhanced memory (the memstore archive), then inspects the codebase and asks targeted questions to write first-draft diary entries. Run once after installing the plugin in a new project. Safe to re-run — idempotent setup, sentinel-based population.
 ---
 
 Set up Memtoad for this project and populate the diary. Run **inline in the main conversation** (do not spawn an agent).
@@ -125,6 +125,54 @@ diary/
 CLAUDE.md
 ```
 
+### 0d — Enhanced memory (optional)
+
+Skip this step if `CLAUDE.md` already contains `<!-- memtoad:store -->`.
+
+Use **AskUserQuestion**:
+
+> "Enable enhanced memory? The two big diary files become a one-line-per-entry Index plus one-paragraph digests, and the full text of every entry is kept in a small chroma database tracked in git (`diary/memstore/`), one pointer away. It needs Python 3.12+ and the `memstore` package (chromadb). Worth it once a diary is too big to read whole each session."
+
+Options:
+- **Not now** — plain three-file diary; can be enabled later by re-running `/bootstrap`
+- **Enable** — install `memstore` into this project's Python environment and switch the two files to Index + digests
+
+If **Enable**:
+
+1. Ask (plain text) which Python environment the project uses, e.g. `conda activate myenv`, `source .venv/bin/activate`, or "the python on PATH". The **memstore command** is that activation followed by `python -m memstore` (e.g. `conda activate myenv && python -m memstore`).
+2. Install into that environment: `pip install "memstore @ git+https://github.com/humantypo/memtoad.git#subdirectory=memstore"` (append `@<tag or commit>` to `memtoad.git` to pin a version). Then run `<memstore command> --help`. If either fails, say so plainly and stop this step; do not write the sentinel.
+3. Pin chromadb: tell the user to record the installed `chromadb` version in the project's requirements. The store records the version that wrote it and refuses to open under another one (a newer chromadb may migrate the files so the older cannot read them); moving versions is `export` with the old one, then `import` with the new.
+4. Append to `.gitattributes` (create it if missing), unless already present:
+   ```
+   # Memtoad enhanced memory: the chroma store is tracked on purpose; never convert its line endings.
+   diary/memstore/** binary
+   ```
+   If the user chose **Private** tracking in 0c, `diary/` is ignored and the store is local-only like the rest of the diary; say so.
+5. In `CLAUDE.md`, directly after the `<!-- memtoad:version:3 -->` Project Memory list, add:
+   ```
+   <!-- memtoad:store -->
+   Enhanced memory is on: `architectural_decisions.md` and `lessons_learned.md` are an Index plus one-paragraph digests; the full text of every entry is in the tracked store `diary/memstore/`. Memstore command: `<memstore command>` (`index`, `get <pointer>`, `search "<query>"`, `ingest diary`, `compact`, `check-pointers`). Never run the `chroma` CLI on the store.
+   ```
+6. In `diary/architectural_decisions.md` and `diary/lessons_learned.md`, replace the "Most recent ... at top. No archiving." line with:
+   > Read the **Index** first (one line per entry, newest first); each digest below it ends in a `mem:` pointer to the full entry (`<memstore command> get <pointer>`). New full entries go directly below the digest region until they are digested.
+
+   Then, directly after the file's first `---` line, insert an empty digest region if the file has none:
+   ```
+   <!-- memstore:digests:start -->
+
+   **Index** (newest first; the digests below follow the same order)
+
+
+   **Digests**
+
+
+   <!-- memstore:digests:end -->
+   ```
+   Any full entries already in the file stay where they are, below the region.
+7. If the two files already hold full entries, run `<memstore command> ingest diary` now, then offer the **first compaction** (below). For a fresh diary nothing more is needed here; Phase 3 archives and digests what it writes.
+
+**First compaction of an existing diary** (only with the user's go-ahead; it rewrites both files): every entry gets a digest in the style of the `session-historian` skill, written by a strong model (a cheap model drops the rules that matter). For more than about 30 entries, split the entries into slices and draft `{slug: digest}` JSON per slice in parallel, each drafter told the style and status rules, and asked to flag what it is unsure of. Before drafting, read the `index` output for unexpected entries: only `##` headings start an entry (a `###` is a sub-section of the entry above it), so a lesson written under a `###` heading is folded into its neighbour and should be re-headed `##` first. Then check every slug is covered once, each digest is one line with a bold lead and no `mem:`, and read every flag. Run `compact <file> --digests FILE --dry-run`, then for real. Finally `check-pointers` (0 errors; read the warnings) and show the user the size change. `compact` refuses any entry whose exact text is not already archived, so nothing can be lost; the old files stay in git history too.
+
 ---
 
 ## Phase 0 complete — detect diary population state
@@ -218,5 +266,7 @@ Write or update each file that is uninitialized (or confirmed for merge in Phase
 - If the user described lessons in Q3: write entries using `## slug-based-header (Month YYYY)` format with a **Rule** and **Why** section.
 - If no lessons yet: leave the file with just the header (no entries) and remove only the sentinel.
 - Remove `<!-- memtoad:uninitialized -->`.
+
+With enhanced memory on (0d), write the decision and lesson entries as full entries directly below `<!-- memstore:digests:end -->`, then follow the `session-historian` skill's enhanced-memory steps 2–4 (ingest, digest, compact, check-pointers) so the files start out as Index + digests.
 
 After writing all files, output a brief summary: which files were written, how many entries were added to each, and remind the user to run `/startup` to verify the briefing reads coherently.

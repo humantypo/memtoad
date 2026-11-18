@@ -7,6 +7,22 @@ Cross-references use (→ slug-name) notation.
 
 ---
 
+## ported-tests-can-run-against-the-original (November 2026)
+
+**Rule**: Verify a package ported from another repo in a fresh virtualenv (or with `PYTHONPATH=src`), never in the originating project's environment. The working env had the originating project's own `memstore` installed editable, so `python -m pytest memstore/tests` here imported the original's source tree and went 39/40 green against the *wrong code*. The one failure only surfaced because the original's extra ingest source, registered as an entry point, leaked into a test.
+
+**Why**: Same package name, same module layout: nothing about a passing run tells you which copy was imported. A green run in the host env says nothing about the port. Check `python -c "import memstore; print(memstore.__file__)"` before trusting results. Also tell users that `python -m memstore` in that env still runs the original.
+
+---
+
+## port-checklists-miss-data-conventions (November 2026)
+
+**Rule**: When porting code out of a host project, look for the host's *data formats* as well as its named specifics (paths, env names, sources). The memstore port checklist removed every name from the originating project, but the diary parser still encoded that project's diary habits: `###` lessons as peer entries, `**Month YYYY Lessons**` dividers, `Lesson N:` title prefixes. Memtoad has never used any of them, and the `###`-peer rule actively split memtoad lessons that have sub-headings.
+
+**Why**: Format tolerances look generic ("it just accepts more"), so a name-based sweep passes them. A tolerance that changes how a valid input of the target format is parsed is a bug, not leniency. Check each parser rule against the target project's own templates (here, the README and bootstrap templates).
+
+---
+
 ## plugin-installs-are-pinned-not-live (August 2026)
 
 **Rule**: Never describe pushing to GitHub as updating already-installed copies of the plugin. Each install is pinned to a `version` + `gitCommitSha` in `~/.claude/plugins/installed_plugins.json`, and the code actually read at runtime is a cached copy under `~/.claude/plugins/cache/`. Propagating a change requires `claude plugin marketplace update` then `claude plugin update` per machine, followed by a restart. Critically, `claude plugin update` gates on the `version` field in `.claude-plugin/plugin.json` changing — a content-only push with the version left unbumped will not be picked up as an available update, even though the commit sha moved. Bump the version (semver: new skill/feature = minor, fix = patch) as part of any commit that should actually reach installed copies.

@@ -1,6 +1,6 @@
 # Memtoad
 
-Persistent, readable project memory for Claude Code. Three markdown files. Nine skills. No database, no cloud sync, no archiving. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
+Persistent, readable project memory for Claude Code. Three markdown files. Nine skills. No cloud sync, nothing archived out of reach; an optional git-tracked archive (enhanced memory) for diaries too big to read whole. Integrated with `/grill-me` logic to bring real-world longitudinal awareness to Claude Code interactions.
 
 ---
 
@@ -18,7 +18,7 @@ Claude already has access to your code, your git history, and your file system. 
 
 Memtoad fills exactly that gap. The diary is not a substitute for git history, inline comments, or documentation — it supplements them by capturing context that wouldn't survive in any of those places.
 
-The system is designed to stay lean. Sessions that produced no new decisions or lessons write one file. Sessions that did produce something new write up to three. There is no archiving, no fourth file. The files grow slowly, remain readable, and load in full on every session.
+The system is designed to stay lean. Sessions that produced no new decisions or lessons write one file. Sessions that did produce something new write up to three. There is no archiving, no fourth file. The files grow slowly, remain readable, and load in full on every session. When a diary outgrows that, enhanced memory (below) keeps the files as an Index plus digests with every full entry one pointer away.
 
 ### Why named Memtoad
 
@@ -179,6 +179,47 @@ A brief code snippet is acceptable only if it makes the lesson clearer.
 
 ---
 
+## Enhanced memory (optional): the memstore
+
+A diary that is read whole every session works until it doesn't: in the project this was built in, the two big files reached 560 KB (about 140k tokens) and could no longer be loaded. Enhanced memory keeps the three files and changes what the two big ones hold:
+
+| Tier | Holds | Read |
+| :--- | :--- | :--- |
+| **Index** (top of `architectural_decisions.md` and `lessons_learned.md`) | one line per entry: title, date, status; newest first | every session, first |
+| **Digests** (below the Index, same order) | one paragraph per entry: the rule, the exact names, the reason, the prohibitions, ending in a `mem:diary/<file>#<slug>` pointer | when an Index line is relevant |
+| **Store** (`diary/memstore/`, a chroma database tracked in git) | the exact full text of every entry, plus searchable chunks | on demand: `get <pointer>`, `search "<query>"` |
+| **Git history** | every earlier version of the files | last resort |
+
+In that project, 560 KB became about 210 KB, of which the two Indexes are 23 KB: about 6k tokens for the whole landscape. Nothing is archived out of reach. `compact` refuses to replace an entry unless the store already holds its exact text, `ingest` never deletes an entry, and the store cannot be dropped while it holds archived entries.
+
+It is **opt-in** (`/bootstrap` step 0d) and stays out of the way when it is off: every skill checks for the `<!-- memtoad:store -->` block in `CLAUDE.md` and behaves exactly as before without it. With it on, and the package unavailable, the skills say so and stop; there is no silent fallback.
+
+**Install** (into the project's own Python environment, 3.12+; `/bootstrap` does this):
+
+```
+pip install "memstore @ git+https://github.com/humantypo/memtoad.git#subdirectory=memstore"
+```
+
+Append `@<tag or commit>` to `memtoad.git` to pin a version, and pin the installed `chromadb` version in the project's requirements: the store records the chromadb version that wrote it and refuses another (`export` with the old version, `import` with the new, to move). The first use downloads chroma's default embedding model to `~/.cache/chroma`.
+
+**Commands** (`python -m memstore ...`, from the repository root):
+
+| Command | Purpose |
+| :--- | :--- |
+| `index` | the session-start read: both Indexes, plus full entries not yet digested |
+| `get mem:diary/<file>#<slug>` | the exact original entry |
+| `search "query" [--where k=v]` | semantic search over entry chunks |
+| `ingest diary [--dry-run]` | archive every entry still present in full; idempotent; never deletes an entry |
+| `compact <file> --digests FILE.json [--dry-run]` | replace archived entries with digests (`{slug: text}`) and rebuild the Index |
+| `check-pointers` | every digest resolves to its exact archived entry, the Index is current, every `mem:` pointer in the repo's markdown resolves |
+| `status`, `export --out FILE`, `import FILE`, `reindex` | counts; a text safety copy; refill a fresh store; re-embed after an embedding change |
+
+**What changes in the skills when it is on:** `startup` runs inline and reads the Indexes, not the files; `session-historian` writes new entries below the digest region, then ingests, digests (in the house style, written by the model that has the session context), compacts and checks pointers; `committer` stages `diary/memstore/` with the rest of `diary/`; `grill-me` reads the Index and drills down; `tidy` acts only on full entries.
+
+**Tracked-file notes.** `.gitattributes` marks `diary/memstore/** binary`. Later commits are small (about 20 KB for an edited entry), but any read touches one counter row in `chroma.sqlite3`, so `git status` can show the store modified after a mere `search`. Never run the `chroma` CLI on the store. The package lives in `memstore/` in this repository (`python -m pytest memstore/tests`); a project can register its own sources under the `memstore.sources` entry-point group.
+
+---
+
 ## The skills
 
 ### `bootstrap` — sets up and populates a project
@@ -192,6 +233,7 @@ Run once in any project directory after installing the plugin. Bootstrap is the 
    - **Shared** — all diary files tracked; best for solo projects
    - **Hybrid** — tracks decisions + lessons, ignores `session_context.md`; recommended for teams
    - **Private** — ignores entire `diary/` and `CLAUDE.md`; each contributor manages diary locally
+4. Offers enhanced memory (opt-in): installs `memstore` into the project's Python environment, adds the `<!-- memtoad:store -->` block to CLAUDE.md, the `.gitattributes` line and an empty digest region to the two big files, and, for an existing diary, offers the first compaction
 
 **Phase 1 — Inspect**: reads CLAUDE.md, README.md, package manifests, docs directory, and recent git log.
 
@@ -206,7 +248,7 @@ The skill detects which files already have entries (via the `<!-- memtoad:uninit
 ```markdown
 ---
 name: bootstrap
-description: Set up Memtoad for a project and populate the diary. Creates diary/ directory and files, injects CLAUDE.md Project Memory section, configures .gitignore, then inspects the codebase and asks targeted questions to write first-draft diary entries. Run once after installing the plugin in a new project. Safe to re-run — idempotent setup, sentinel-based population.
+description: Set up Memtoad for a project and populate the diary. Creates diary/ directory and files, injects CLAUDE.md Project Memory section, configures .gitignore, optionally enables enhanced memory (the memstore archive), then inspects the codebase and asks targeted questions to write first-draft diary entries. Run once after installing the plugin in a new project. Safe to re-run — idempotent setup, sentinel-based population.
 ---
 ```
 
@@ -218,18 +260,9 @@ description: Set up Memtoad for a project and populate the diary. Creates diary/
 
 Spawns a subagent to read all three diary files and synthesize a briefing. Runs from cold — the main conversation has no context yet, so spawning is appropriate here.
 
+With enhanced memory on, it runs **inline** instead: `index` prints both Indexes, it reads `session_context.md` and any not-yet-digested `[FULL]` entries, and it drills into a digest or `get <pointer>` only when an Index line bears on the task. If the memstore command fails it says so and stops.
+
 **File**: `skills/startup/SKILL.md`
-
-```markdown
----
-name: startup
-description: Load full project context at the start of a session — reads architectural decisions, current implementation state, and session context to establish a complete picture before beginning work.
----
-
-Use the Agent tool to spawn the `startup` subagent with this prompt:
-
-"Load full project context. Read diary/architectural_decisions.md, diary/lessons_learned.md, and diary/session_context.md in order. Synthesize the current state, active priorities, and any open questions, then report a concise briefing."
-```
 
 **When to invoke**: at the start of any non-trivial session, or when the user asks "what were we working on?"
 
@@ -286,10 +319,12 @@ Run the following **inline in the main conversation** (do not spawn an agent —
 ## Format rules
 
 - `session_context.md`: lean prose sections — Current State, Most Recent Sessions, Open Items, Key Diary Files
-- Most recent entries at the top in all three files
+- Most recent entries at the top in all three files (with enhanced memory: new full entries go directly below the digest region, see below)
 - Cross-references use `(→ slug-name)` notation, not numbers
-- No archiving — files grow without rotation
+- Nothing is archived out of reach: without the store the files grow without rotation; with it, every entry stays one pointer away
 ```
+
+With enhanced memory on, the skill then archives each new entry (`ingest diary`), writes its digest in the house style, runs `compact` (dry run first) and `check-pointers` (0 errors), and proofreads each digest against its entry before staging. The full steps and the digest style are in `skills/session-historian/SKILL.md`.
 
 **When to invoke**: directly at the end of any significant session; or via `/committer` which decides the mode for you before a commit.
 
@@ -442,6 +477,8 @@ Commits that touch more than documentation are gated on `diary/` being staged �
 
 The `<!-- memtoad:version:3 -->` marker allows future bootstrap runs to detect and offer to refresh stale sections.
 
+With enhanced memory on, bootstrap adds a `<!-- memtoad:store -->` block after that list. It says the two big files are Index + digests and names the **memstore command** for this project (the environment activation plus `python -m memstore`). Every skill reads its command from there, so nothing in the plugin assumes a particular Python environment.
+
 For component-level `CLAUDE.md` files (inside a subdirectory like `frontend/` or `api/`), use relative paths for the diary links:
 
 ```markdown
@@ -538,7 +575,7 @@ These constrain how the system evolves. If you fork or extend it, respect them.
 
 **Inline, not spawned — except startup, context-capture, and skill-inventory.** Session-historian and committer run in the main conversation, which already has session context. Spawning an agent to re-derive context you already have is the expensive path. Startup spawns because it genuinely starts cold. Context-capture spawns to snapshot state independently of the current conversation thread. Skill-inventory spawns for the same reason as startup — it's a cold sweep over plugin caches and marketplace clones that has nothing to do with the conversation so far, and doing that reading inline would waste the main context window. Grill-me runs inline because it needs AskUserQuestion, which agents cannot use.
 
-**No archiving.** The old system archived files when they grew large. Modern context windows make this obsolete, and archived files are never read. Let the files grow.
+**No archiving.** The old system archived files when they grew large. Modern context windows make this obsolete, and archived files are never read. Let the files grow. Enhanced memory is not archiving in that sense: every entry keeps a digest in the file that is read every session, and the digest points at the exact full text.
 
 **Conditional writes.** Session-historian always updates `session_context.md`. It only touches the other two files when something genuinely new was decided or learned. Most sessions produce only one update.
 
