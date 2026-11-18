@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from memstore import cli, diary
+from memstore import store as store_mod
 from memstore.store import Store, StoreError, resolve_store_path
 from memstore_testkit import tree_hashes
 from test_diary import DECISIONS, LESSONS, diary_repo  # noqa: F401  (fixture)
@@ -115,6 +116,7 @@ def _package_files():
 
 def test_memstore_imports_no_host_application():
     allowed = {"memstore", "argparse", "json", "sys", "collections", "pathlib", "re", "subprocess", "dataclasses",
+               "shutil", "sqlite3", "tempfile",
                "hashlib", "os", "importlib", "chromadb"}
     imported = {m.group(2).split(".")[0] for p in _package_files()
                 for m in re.finditer(r"^\s*(from|import)\s+([\w.]+)", p.read_text(), re.M)}
@@ -126,11 +128,14 @@ def test_chromadb_is_imported_only_when_a_store_is_opened():
     assert not top_level
 
 
-def test_store_written_by_another_chromadb_version_is_refused(diary_repo, tmp_path, ef, monkeypatch):
+def test_another_chromadb_version_with_the_same_format_opens(diary_repo, tmp_path, ef, monkeypatch):
     diary.ingest(Store(tmp_path / "s", embedding_function=ef), diary_repo)
-    monkeypatch.setattr("memstore.store.chromadb_version", lambda: "9.9.9")
-    with pytest.raises(StoreError, match="written by chromadb"):
-        diary.ingest(Store(tmp_path / "s", embedding_function=ef), diary_repo)
+    monkeypatch.setattr("memstore.store.chromadb_version", lambda: "1.5.99")  # a release that changes nothing on disk
+    probed = []
+    real = store_mod.read_probe
+    monkeypatch.setattr("memstore.store.read_probe", lambda p: probed.append(p) or real(p))
+    diary.ingest(Store(tmp_path / "s", embedding_function=ef), diary_repo)
+    assert probed == [tmp_path / "s"]  # a different version is proven on a copy before the real store is opened
 
 
 def test_export_writes_sorted_verbatim_jsonl(diary_repo, tmp_path, stub_embedder, capsys):
