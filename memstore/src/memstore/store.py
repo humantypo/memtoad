@@ -5,7 +5,10 @@ chromadb is imported only here and only when a store is opened, so nothing else 
 import hashlib
 import json
 import os
+import shutil
+import sqlite3
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -100,6 +103,135 @@ def chromadb_version():
     return chromadb.__version__
 
 
+# ---------------------------------------------------------------------------------------------------- format compatibility
+#
+# chromadb migrates a store's on-disk format when it opens it, one way, and records each step in the `migrations` table of
+# `chroma.sqlite3`. A store is tracked in git and shared, so a teammate whose chromadb migrates it would lock out everyone
+# on an older version. The version string is a poor proxy (most releases change nothing on disk), so compatibility is
+# decided from the migrations themselves, read with sqlite3 *before* chromadb touches the store.
+
+_KNOWN = None
+
+
+def store_migrations(path):
+    """{(dir, version)} of the format migrations applied to the store at `path`; empty when there is none."""
+    db = Path(path) / "chroma.sqlite3"
+    if not db.is_file():
+        return set()
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            return {(d, int(v)) for d, v in con.execute("SELECT dir, version FROM migrations")}
+        finally:
+            con.close()
+    except sqlite3.DatabaseError as exc:  # locked, corrupt, or not a chroma store: say so, never guess a format
+        raise StoreError(f"Cannot read the format of the store at {path} ({db.name}: {exc}).") from exc
+
+
+def recorded_chromadb(path):
+    """The chromadb version recorded when the store's collection was created, or None."""
+    db = Path(path) / "chroma.sqlite3"
+    if not db.is_file():
+        return None
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        row = con.execute("SELECT m.str_value FROM collection_metadata m JOIN collections c ON c.id = m.collection_id "
+                          "WHERE c.name = ? AND m.key = 'memstore_chromadb'", (COLLECTION,)).fetchone()
+        return row[0] if row else None
+    except sqlite3.DatabaseError:
+        return None
+    finally:
+        con.close()
+
+
+def _cache_file():
+    base = Path(os.environ.get("MEMSTORE_CACHE") or Path.home() / ".cache" / "memstore")
+    return base / f"known-migrations-chromadb-{chromadb_version()}.json"
+
+
+def known_migrations():
+    """The format migrations the installed chromadb applies: those of a fresh, empty store it creates in a temp dir.
+    Fixed per chromadb version, so cached on disk per version (best effort: a bad cache only costs the probe again)."""
+    global _KNOWN
+    if _KNOWN is None:
+        cache = _cache_file()
+        try:
+            _KNOWN = {(d, int(v)) for d, v in json.loads(cache.read_text())}
+        except (OSError, ValueError, TypeError):
+            import chromadb
+            from chromadb.config import Settings
+            tmp = tempfile.mkdtemp(prefix="memstore-probe-")
+            try:
+                chromadb.PersistentClient(path=tmp, settings=Settings(anonymized_telemetry=False))
+                _KNOWN = store_migrations(tmp)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            if not _KNOWN:
+                _KNOWN = None
+                raise StoreError(f"chromadb {chromadb_version()} records no format migrations where memstore looks for "
+                                 "them, so store compatibility cannot be decided; memstore needs updating for it.")
+            if _KNOWN:
+                try:
+                    cache.parent.mkdir(parents=True, exist_ok=True)
+                    cache.write_text(json.dumps(sorted(_KNOWN)))
+                except OSError:
+                    pass
+    return _KNOWN
+
+
+def _names_of(migrations):
+    return ", ".join(f"{d} {v}" for d, v in sorted(migrations))
+
+
+def read_probe(path):
+    """Open a throwaway copy of the store with the installed chromadb and read from it; raises on any failure."""
+    import chromadb
+    from chromadb.config import Settings
+    tmp = Path(tempfile.mkdtemp(prefix="memstore-probe-"))
+    try:
+        shutil.copytree(path, tmp / "store")
+        client = chromadb.PersistentClient(path=str(tmp / "store"), settings=Settings(anonymized_telemetry=False))
+        if COLLECTION in [c if isinstance(c, str) else c.name for c in client.list_collections()]:
+            col = client.get_collection(COLLECTION, embedding_function=None)
+            if col.count():
+                col.get(limit=1, include=["documents", "metadatas"])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def compatibility(path):
+    """("same" | "migrate" | "newer", detail) for the store at `path` and the installed chromadb, without opening it."""
+    applied, known = store_migrations(path), known_migrations()
+    if applied - known:
+        return "newer", _names_of(applied - known)
+    if known - applied:
+        return "migrate", _names_of(known - applied)
+    return "same", ""
+
+
+def check_format(path, allow_upgrade=False):
+    """Refuse, before chromadb opens the real store, any open that would migrate it or that it cannot read."""
+    state, detail = compatibility(path)
+    built_with = recorded_chromadb(path) or "an unknown version"
+    if state == "newer":
+        raise StoreError(f"The store at {path} uses format migrations ({detail}) that chromadb {chromadb_version()} does "
+                         f"not know; it was last migrated by a newer chromadb (created with {built_with}). Upgrade "
+                         "chromadb to the version the project's requirements name.")
+    if state == "migrate" and not allow_upgrade:
+        raise StoreError(f"chromadb {chromadb_version()} would migrate the store at {path} to a newer format ({detail}), "
+                         "one way: teammates on the older chromadb could no longer read it once it is committed. "
+                         "Nothing was changed. Either install the chromadb the project's requirements name, or run "
+                         "`upgrade-store` and raise the project's chromadb floor in the same commit.")
+    if state == "same" and recorded_chromadb(path) not in (None, chromadb_version()):
+        try:
+            read_probe(path)  # same format; still prove this version can read it before touching the real store
+        except Exception as exc:
+            raise StoreError(f"chromadb {chromadb_version()} cannot read the store at {path} (created with {built_with}), "
+                             f"although its format migrations match: {exc}. Install the chromadb the project's "
+                             "requirements name.") from exc
+    return state
+
+
 def default_embedding_function():
     from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
     return ONNXMiniLM_L6_V2()
@@ -108,10 +240,12 @@ def default_embedding_function():
 class Store:
     """One chroma collection. `embedding_function` is injectable so tests need no model download."""
 
-    def __init__(self, path, embedding_function=None, create=True):
+    def __init__(self, path, embedding_function=None, create=True, allow_upgrade=False):
         self.path = Path(path)
         self._ef = embedding_function
         self._create = create
+        self._allow_upgrade = allow_upgrade  # only `upgrade-store` lets the installed chromadb migrate the format
+        self._checked = False
         self._collection = None
 
     @property
@@ -133,6 +267,9 @@ class Store:
     def _client(self):
         import chromadb
         from chromadb.config import Settings
+        if not self._checked and (self.path / "chroma.sqlite3").is_file():
+            check_format(self.path, self._allow_upgrade)  # before chromadb opens it: opening is what migrates
+            self._checked = True
         return chromadb.PersistentClient(path=str(self.path), settings=Settings(anonymized_telemetry=False))
 
     @staticmethod
@@ -152,12 +289,6 @@ class Store:
                 raise StoreError(f"The store at {self.path} was built with another embedding than '{self.ef.name()}'. "
                                  "Re-embed it from its stored text: `reindex`.") from exc
             meta = col.metadata or {}
-            built_with = meta.get("memstore_chromadb")
-            if built_with != chromadb_version():
-                raise StoreError(f"The store at {self.path} was written by chromadb {built_with}, but {chromadb_version()} is "
-                                 "installed; a different version may migrate the files so the older one cannot read them. "
-                                 "Install the matching version, or run `export --out FILE` with it and then `import FILE` "
-                                 "into a fresh store with this one.")
             recorded = meta.get("memstore_embedding")
             if recorded != self.ef.name():
                 raise StoreError(f"The store at {self.path} was built with embedding '{recorded}', not '{self.ef.name()}'. "
@@ -293,11 +424,7 @@ class Store:
             names = self._names(client)
         if COLLECTION not in names:
             raise StoreError(f"The store at {self.path} has no '{COLLECTION}' collection.")
-        old = client.get_collection(COLLECTION, embedding_function=None)
-        built_with = (old.metadata or {}).get("memstore_chromadb")
-        if built_with != chromadb_version():
-            raise StoreError(f"The store was written by chromadb {built_with} but {chromadb_version()} is installed; "
-                             "use `export --out FILE` with the matching version, then `import FILE` here.")
+        old = client.get_collection(COLLECTION, embedding_function=None)  # format compatibility was checked in _client
         for leftover in ("memstore_new", "memstore_old"):
             if leftover in names:
                 client.delete_collection(leftover)

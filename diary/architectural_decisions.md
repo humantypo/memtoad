@@ -11,6 +11,25 @@ Last full review: November 18, 2026
 
 ---
 
+## store-compatibility-from-migrations (November 18, 2026)
+
+memstore decides whether the installed chromadb may open a store from chromadb's own `migrations` table in `chroma.sqlite3`, not from the version string.
+- **How:** it reads the table with `sqlite3` before chromadb touches the store, and compares it with the migrations the installed chromadb writes into a throwaway empty store. That set is cached per version in `~/.cache/memstore`.
+- **Outcomes:**
+  - same format: opens, after a read probe of a copy when the version differs from the one that created the store;
+  - the installed chromadb would add migrations: refused until a deliberate `upgrade-store`, committed with a raised chromadb floor;
+  - the store has migrations the installed chromadb lacks: refused.
+- **Requirements:** projects bound chromadb (`>=<floor>,<2`) instead of pinning it exactly.
+
+**Why**: the exact-version guard broke on every chromadb release, although most change nothing on disk. Worse, it ran after `PersistentClient` had already opened the store, and opening is what migrates it (→ check-before-the-side-effect). Experiments on scratch copies settled the rest:
+- chromadb 1.5.9 opened a store carrying an unknown future migration without complaint, so memstore must catch a newer store itself.
+- chromadb 1.x applies migrations that the Python package ships no files for, so the known set has to come from chromadb's actual behaviour.
+- `collection.modify` refuses `hnsw:space` and drops it when it is left out, so the recorded "created with" version is never rewritten. The probe is fast enough to run on every open instead.
+
+One gap is accepted and documented: a newer release with the same migrations could write data an older one cannot read. The worst case is a read error, and the earlier store stays in git.
+
+---
+
 ## labels-not-deletion (November 18, 2026)
 
 An entry that stops being true keeps its text and gets a label inside its heading's date parenthetical: `superseded by <slug>` (the target may be in either file) or `retired <Mon YYYY>: <reason>` (one clause, at most 120 characters, no parentheses). An unlabelled entry is in force; there is no `active` status. Labels are applied at two moments only: by `session-historian` when it writes an entry, after asking whether the new entry replaces, retires or amends an existing one (an amendment corrects the old entry and leaves it in force); and by `/tidy` on demand. There are no profiles, schedules, counters or age rules, and no purge. With enhanced memory the label lives in the markdown only, the Index lists labelled entries last under "No longer in force", and `memstore set-label` applies one.

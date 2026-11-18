@@ -8,6 +8,14 @@ heading like a decision, never deleted.
 
 ---
 
+## check-before-the-side-effect (November 18, 2026)
+
+**Rule**: A guard against an irreversible side effect must run before the call that causes it. Find out what the call does on its own (open, connect, import, init) before placing the check after it.
+
+**Why**: memstore's chromadb version guard ran after `chromadb.PersistentClient(path=...)`, and constructing that client is what applies migrations to the store. So the guard refused only after the one-way change had already happened, and a passing test of the refusal hid that. Only an experiment showed it: a store with one migration removed was immediately re-migrated on open. The fix reads the store's state with plain `sqlite3` first (→ store-compatibility-from-migrations).
+
+---
+
 ## gated-paths-make-bad-change-signals (November 18, 2026)
 
 **Rule**: Never derive "when did X last happen" from changes to a path that another mechanism forces into every commit. Check which hooks, gates or tools touch the path before using its history as a signal; use a marker that changes only when X happens.

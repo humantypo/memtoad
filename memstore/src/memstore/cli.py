@@ -6,7 +6,8 @@ from collections import Counter
 from pathlib import Path
 
 from memstore import check, diary
-from memstore.store import Store, StoreError, git_toplevel, resolve_store_path
+from memstore.store import (Store, StoreError, check_format, chromadb_version, compatibility, git_toplevel,
+                             recorded_chromadb, resolve_store_path, store_migrations)
 
 
 def load_sources():
@@ -209,10 +210,49 @@ def cmd_compact(args, store, root):
     return 0
 
 
+def _format_line(store):
+    state, detail = compatibility(store.path)
+    verdict = {"same": "compatible",
+               "migrate": f"would migrate the store ({detail}); refused until `upgrade-store`",
+               "newer": f"too old: the store has format migrations it does not know ({detail})"}[state]
+    return state, (f"Format: {len(store_migrations(store.path))} migrations (created with chromadb "
+                   f"{recorded_chromadb(store.path) or 'unknown'}); installed chromadb {chromadb_version()}: {verdict}")
+
+
+def cmd_upgrade_store(args, store, root):
+    if not store.exists:
+        raise StoreError(f"No store at {store.path}; run `ingest` first.")
+    state, detail = compatibility(store.path)
+    if state == "newer":
+        check_format(store.path)  # raises with the explanation
+    if state == "same":
+        print(f"Nothing to do: the store's format already matches chromadb {chromadb_version()}.")
+        return 0
+    if args.dry_run:
+        print(f"Would migrate the store to chromadb {chromadb_version()}'s format ({detail}). One way: commit it together "
+              "with a raised chromadb floor in the project's requirements.")
+        return 0
+    before = store_migrations(store.path)
+    n = store.collection.count()  # opening with allow_upgrade applies the migrations
+    added = store_migrations(store.path) - before
+    print(f"Migrated the store to chromadb {chromadb_version()}'s format "
+          f"({', '.join(f'{d} {v}' for d, v in sorted(added)) or 'no new migrations recorded'}); {n} records readable.\n"
+          f"The pre-upgrade store stays in git history. In this same commit, raise the project's chromadb floor to "
+          f"{chromadb_version()} (e.g. chromadb>={chromadb_version()},<2) so every contributor upgrades with it.")
+    return 0
+
+
 def cmd_status(args, store, root):
     import chromadb
+    if store.exists:
+        state, line = _format_line(store)
+        if state != "same":
+            print(f"Store: {store.path}\n{line}")
+            return 1
     metas = store.all_metadata()
     print(f"Store: {store.path}\nEmbedding: {store.ef.name()}   chromadb {chromadb.__version__}")
+    if store.exists:
+        print(_format_line(store)[1])
     print(f"Chunks: {len(metas)} across {len({m['source_id'] for m in metas})} sources")
     for (component, kind), n in sorted(Counter((m["component"], m["kind"]) for m in metas).items()):
         print(f"  {component:10s} {kind:8s} {n}")
@@ -258,6 +298,9 @@ def main(argv=None):
     which.add_argument("--clear", action="store_true", help="back in force")
     lab.add_argument("--dry-run", action="store_true")
 
+    upg = sub.add_parser("upgrade-store", help="let the installed chromadb migrate the store's format (one way; raise the project's chromadb floor with it)")
+    upg.add_argument("--dry-run", action="store_true")
+
     rst = sub.add_parser("restore", help="put an archived entry that lost its digest back into its file as a full entry")
     rst.add_argument("pointer", help="mem:diary/<file>#<slug>")
     rst.add_argument("--dry-run", action="store_true")
@@ -288,9 +331,11 @@ def main(argv=None):
         parser.error("--rebuild and --dry-run cannot be combined")
     try:
         root = Path(args.root) if args.root else git_toplevel()
-        store = Store(resolve_store_path(args.store), create=args.command in ("ingest", "compact", "import"))
+        store = Store(resolve_store_path(args.store), create=args.command in ("ingest", "compact", "import"),
+                      allow_upgrade=args.command == "upgrade-store")
         return {"status": cmd_status, "ingest": cmd_ingest, "search": cmd_search, "get": cmd_get, "export": cmd_export, "compact": cmd_compact,
                 "reindex": cmd_reindex, "import": cmd_import, "index": cmd_index, "set-label": cmd_set_label, "restore": cmd_restore,
+                "upgrade-store": cmd_upgrade_store,
                 "check-pointers": cmd_check_pointers}[args.command](args, store, root)
     except (StoreError, FileNotFoundError) as exc:
         print(f"memstore: {exc}", file=sys.stderr)

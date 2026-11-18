@@ -153,7 +153,7 @@ If **Enable**:
 
 1. Ask (plain text) which Python environment the project uses, e.g. `conda activate myenv`, `source .venv/bin/activate`, or "the python on PATH". The **memstore command** is that activation followed by `python -m memstore` (e.g. `conda activate myenv && python -m memstore`).
 2. Install into that environment: `pip install "memstore @ git+https://github.com/humantypo/memtoad.git#subdirectory=memstore"` (append `@<tag or commit>` to `memtoad.git` to pin a version). Then run `<memstore command> --help`. If either fails, say so plainly and stop this step; do not write the sentinel.
-3. Pin chromadb: tell the user to record the installed `chromadb` version in the project's requirements. The store records the version that wrote it and refuses to open under another one (a newer chromadb may migrate the files so the older cannot read them); moving versions is `export` with the old one, then `import` with the new.
+3. Bound chromadb: tell the user to add a floor and a ceiling to the project's requirements, using the installed version as the floor, e.g. `chromadb>=1.5.9,<2`. Do not pin an exact version. Any chromadb whose on-disk format matches the store's opens it. memstore refuses one that would migrate the store (one way: teammates on the older chromadb could no longer read it) or that is older than the store's format, and says so before chromadb touches the files. Moving to a format-changing chromadb is a deliberate `upgrade-store`, committed together with a raised floor.
 4. Append to `.gitattributes` (create it if missing), unless already present:
    ```
    # Memtoad enhanced memory: the chroma store is tracked on purpose; never convert its line endings.

@@ -81,7 +81,7 @@ Enhanced memory is worth turning on when you want long, detailed decision and le
 3. When it asks whether to merge new entries into the already-populated diary, choose abort if you only came to enable enhanced memory.
 
 **Afterwards:**
-- Record the installed `chromadb` version in the project's requirements. The store refuses to open under a different chromadb version.
+- Bound chromadb in the project's requirements, with the installed version as the floor, e.g. `chromadb>=1.5.9,<2`, not an exact pin. Any version that keeps the store's format opens it (see [chromadb versions](#chromadb-versions)).
 - Commit `diary/memstore/` along with the rest of `diary/` (`/committer` stages it). Unless you chose Private tracking, that database is shared with everyone who clones the repo.
 - Nothing else changes in how you work: `/startup`, `/session-historian`, `/committer`, `/grill-me` and `/tidy` detect the `CLAUDE.md` block and switch to the Index-and-store flow automatically.
 
@@ -100,8 +100,9 @@ Details, commands and guarantees: [Enhanced memory (optional): the memstore](#en
 1. **Update the plugin** on each machine: `claude plugin marketplace update`, then `claude plugin update`, then restart Claude Code. Installed plugins are pinned copies, so pushing a new version does not reach them on its own.
 2. **If the project uses enhanced memory,** upgrade its `memstore` package too. The 2.0 skills call `set-label` and `restore`, which memstore 0.2.0 does not have, and re-running `/bootstrap` does not reinstall it:
    ```
-   pip install --upgrade "memstore @ git+https://github.com/humantypo/memtoad.git@v2.0.0#subdirectory=memstore"
+   pip install --upgrade "memstore @ git+https://github.com/humantypo/memtoad.git@v2.0.1#subdirectory=memstore"
    ```
+   If the project's requirements pin `chromadb==<version>` exactly (the 1.x advice), loosen it to `chromadb>=<version>,<2`. Since memstore 0.3.1 any chromadb with the same store format works ([chromadb versions](#chromadb-versions)).
 3. **Keep a copy of your session history if you want it.** The first 2.0 historian run trims "Most Recent Sessions" to the current session and the one before it. It lists what it drops when the file is untracked (hybrid and private mode), but those notes then exist nowhere else. Copy `diary/session_context.md` aside first if you want to keep them.
 4. **Expect the first `/committer` run to be FULL.** The `Last full review:` line does not exist yet, which reads as "never". That run adds the line.
 5. **Run `/tidy` once.** A 1.x diary has stale entries that no capture-time check ever labelled. The review pass proposes labels and corrections with evidence, and you confirm each.
@@ -294,7 +295,20 @@ It is **opt-in** (`/bootstrap` step 0d; see [Enable enhanced memory](#enable-enh
 pip install "memstore @ git+https://github.com/humantypo/memtoad.git#subdirectory=memstore"
 ```
 
-Append `@<tag or commit>` to `memtoad.git` to pin a version, and pin the installed `chromadb` version in the project's requirements: the store records the chromadb version that wrote it and refuses another (`export` with the old version, `import` with the new, to move). The first use downloads chroma's default embedding model to `~/.cache/chroma`.
+Append `@<tag or commit>` to `memtoad.git` to pin a version, and bound `chromadb` in the project's requirements: the installed version as the floor, `<2` as the ceiling. The first use downloads chroma's default embedding model to `~/.cache/chroma`.
+
+#### chromadb versions
+
+chromadb migrates a store's on-disk format when it opens it, and the migration is one way. The store is tracked in git and shared, so if one contributor's newer chromadb migrated it and they committed, everyone on the older version would be locked out. memstore guards against that without tying the project to one exact chromadb release:
+
+- **Compatibility is decided from the format, not the version number.** chromadb records each format step in the store's `migrations` table. Before chromadb opens the store, memstore reads that table with `sqlite3` and compares it with the steps the installed chromadb applies, taken from a throwaway empty store and cached per version in `~/.cache/memstore`.
+- **Same format:** it opens, whatever the version number. When the number differs from the one that created the store, memstore first opens and reads a throwaway copy, to prove this version can read it. Most chromadb releases fall here.
+- **The installed chromadb would migrate it:** refused, with nothing changed. Either install the version the requirements name, or move the whole project forward deliberately: run `upgrade-store` and raise the chromadb floor in the same commit.
+- **The store is newer than the installed chromadb:** refused, because chromadb itself would open it without complaint. Upgrade chromadb.
+
+`status` reports which case applies. A move to chromadb 2 is outside this scheme: `export` with the old version, then `import` with the new.
+
+One gap remains. The copy-read probe proves that a newer chromadb can read an older store, not the reverse. A newer release with the same migrations could in principle write data files an older one cannot read. The older contributor would then get a read error, not data loss, and git history still holds the earlier store. Keeping everyone within the same requirements range is what closes it.
 
 **Commands** (`python -m memstore ...`, from the repository root):
 
@@ -308,7 +322,8 @@ Append `@<tag or commit>` to `memtoad.git` to pin a version, and pin the install
 | `set-label mem:diary/<file>#<slug> (--superseded-by SLUG \| --retired "Mon YYYY: reason" \| --clear)` | label a digest (or a full entry's heading) as no longer in force and rebuild the Index; markdown only, never the store |
 | `restore mem:diary/<file>#<slug>` | put an archived entry that lost its digest (renamed or deleted after `ingest`) back below the region, to be compacted again with a label |
 | `check-pointers` | every digest resolves to its exact archived entry, every archived entry still has a digest or full entry, labels are well formed, the Index is current, every `mem:` pointer in the repo's markdown resolves |
-| `status`, `export --out FILE`, `import FILE`, `reindex` | counts; a text safety copy; refill a fresh store; re-embed after an embedding change |
+| `upgrade-store [--dry-run]` | let the installed chromadb migrate the store's format; one way, committed with a raised chromadb floor ([chromadb versions](#chromadb-versions)) |
+| `status`, `export --out FILE`, `import FILE`, `reindex` | counts and format compatibility; a text safety copy; refill a fresh store; re-embed after an embedding change |
 
 **What changes in the skills when it is on:** `startup` runs inline and reads the Indexes, not the files; `session-historian` writes new entries below the digest region, then ingests, digests (in the house style, written by the model that has the session context), compacts and checks pointers; labels what each new entry supersedes with `set-label`; `committer` stages `diary/memstore/` with the rest of `diary/`; `grill-me` reads the Index and drills down; `tidy` labels digested entries with `set-label` and never folds or deletes a digest (its archived entry would be left with no digest, which `check-pointers` reports as an error).
 
