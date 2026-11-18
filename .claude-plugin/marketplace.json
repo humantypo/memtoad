@@ -4,12 +4,12 @@
     "name": "humantypo",
     "email": "bill+git@parducci.net"
   },
-  "description": "Marketplace for Memtoad — persistent project memory for Claude Code (diary-based session continuity, architectural decisions, and lessons learned).",
+  "description": "Marketplace for Memtoad — persistent project memory for Claude Code (diary-based session continuity, architectural decisions, and lessons learned, with optional enhanced memory backed by a local, git-tracked database).",
   "plugins": [
     {
       "name": "memtoad",
       "source": "./",
-      "description": "Persistent project memory for Claude Code — diary-based session continuity, architectural decisions, and lessons learned. Optional enhanced memory: Index + digests in the files, every full entry in a git-tracked archive. Run /bootstrap to set up a new project, /startup to load context, /committer to document before committing."
+      "description": "Persistent project memory for Claude Code — diary-based session continuity, architectural decisions, and lessons learned. Optional enhanced memory: a local, git-tracked database keeps the full text of every decision and lesson, so the diary can stay detailed and span the whole life of a project while each session reads only a compact Index (opt in with /bootstrap; needs Python 3.12+). Entries that stop applying are labelled superseded or retired, never deleted, and the session log keeps only active work. Run /bootstrap to set up a new project, /startup to load context, /committer to document before committing."
     }
   ]
 }

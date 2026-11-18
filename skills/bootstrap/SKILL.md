@@ -19,6 +19,13 @@ Check whether `diary/` exists in the current working directory. If it does not, 
 
 ---
 
+## Arc
+
+[One line per milestone (a version or phase): what changed and why it mattered. This, not the
+session log, is the record of where the project has been.]
+
+---
+
 ## Current State
 
 [One paragraph: what the system is, production status, key facts a new engineer needs to orient.
@@ -28,7 +35,8 @@ Not a feature list — a snapshot of where things stand right now.]
 
 ## Most Recent Sessions
 
-[Entries added here by /committer or /session-historian. Most recent first.
+[Entries added here by /committer or /session-historian. Most recent first. Only the current
+session and the one before it, plus any still in flight: context on active work, not a history.
 Each entry: date, what was done (WHY-focused), any cross-refs to lessons or decisions.]
 
 ---
@@ -55,7 +63,10 @@ Design principles and the reasoning behind non-obvious choices. Add an entry whe
 engineer would reasonably ask "why did they do it this way?" — and the answer isn't obvious
 from the code.
 
-Most recent decisions at top. No archiving.
+Most recent decisions at top. Nothing is deleted: an entry that stops applying gets a label in its
+heading, `(Month YYYY; superseded by <slug>)` or `(Month YYYY; retired <Mon YYYY>: <reason>)`.
+
+Last full review: [Date]
 
 ---
 
@@ -69,7 +80,8 @@ Most recent decisions at top. No archiving.
 Anti-patterns, failure modes, and hard-won rules. Most recent at top. Add an entry only when
 a lesson is non-obvious — if it's standard practice or documented in the framework, skip it.
 
-Cross-references use (→ slug-name) notation.
+Cross-references use (→ slug-name) notation. A lesson that no longer applies is labelled in its
+heading like a decision, never deleted.
 
 ---
 
@@ -131,7 +143,7 @@ Skip this step if `CLAUDE.md` already contains `<!-- memtoad:store -->`.
 
 Use **AskUserQuestion**:
 
-> "Enable enhanced memory? The two big diary files become a one-line-per-entry Index plus one-paragraph digests, and the full text of every entry is kept in a small chroma database tracked in git (`diary/memstore/`), one pointer away. It needs Python 3.12+ and the `memstore` package (chromadb). Worth it once a diary is too big to read whole each session."
+> "Enable enhanced memory? The two big diary files become a one-line-per-entry Index plus one-paragraph digests, and the full text of every entry is kept in a small chroma database tracked in git (`diary/memstore/`), one pointer away. It needs Python 3.12+ and the `memstore` package (chromadb). Worth it if you want detailed entries kept for the life of the project, or once a diary is too big to read whole each session."
 
 Options:
 - **Not now** — plain three-file diary; can be enabled later by re-running `/bootstrap`
@@ -151,9 +163,9 @@ If **Enable**:
 5. In `CLAUDE.md`, directly after the `<!-- memtoad:version:3 -->` Project Memory list, add:
    ```
    <!-- memtoad:store -->
-   Enhanced memory is on: `architectural_decisions.md` and `lessons_learned.md` are an Index plus one-paragraph digests; the full text of every entry is in the tracked store `diary/memstore/`. Memstore command: `<memstore command>` (`index`, `get <pointer>`, `search "<query>"`, `ingest diary`, `compact`, `check-pointers`). Never run the `chroma` CLI on the store.
+   Enhanced memory is on: `architectural_decisions.md` and `lessons_learned.md` are an Index plus one-paragraph digests; the full text of every entry is in the tracked store `diary/memstore/`. Memstore command: `<memstore command>` (`index`, `get <pointer>`, `search "<query>"`, `ingest diary`, `compact`, `set-label`, `check-pointers`). Never run the `chroma` CLI on the store.
    ```
-6. In `diary/architectural_decisions.md` and `diary/lessons_learned.md`, replace the "Most recent ... at top. No archiving." line with:
+6. In `diary/architectural_decisions.md` and `diary/lessons_learned.md`, replace the sentence that begins "Most recent" (in older diaries, "Most recent ... at top. No archiving.") with:
    > Read the **Index** first (one line per entry, newest first); each digest below it ends in a `mem:` pointer to the full entry (`<memstore command> get <pointer>`). New full entries go directly below the digest region until they are digested.
 
    Then, directly after the file's first `---` line, insert an empty digest region if the file has none:
@@ -251,6 +263,7 @@ If yes, ask as plain text: "Describe what happened and what the one-sentence rul
 Write or update each file that is uninitialized (or confirmed for merge in Phase 0). Remove `<!-- memtoad:uninitialized -->` from every file you write.
 
 **`diary/session_context.md`**:
+- **Arc**: one to three lines from the git log and docs: the project's major milestones so far and why they mattered. One line, "Memtoad set up", is fine for a new project.
 - **Current State**: one paragraph synthesizing Phase 1 findings plus any gaps the user named in Q1. Describe what the system is, its production status, key tech facts.
 - **Most Recent Sessions**: leave empty — this is populated by `/committer` or `/session-historian` going forward.
 - **Open Items**: populate from any deferred work found in existing docs, plus anything the user described in Q1.
@@ -260,6 +273,7 @@ Write or update each file that is uninitialized (or confirmed for merge in Phase
 **`diary/architectural_decisions.md`**:
 - If decisions were found in docs (Phase 1) or the user described one (Q2): write entries using `## slug-based-header (Month YYYY)` format. One sentence stating the decision, then a **Why** section for the reasoning.
 - If no decisions exist yet: write a single minimal entry noting when the diary was initialized, to be expanded as decisions are made.
+- Set `Last full review: [Date]` to today (add the line above the first `---` if a pre-2.0 file lacks it).
 - Remove `<!-- memtoad:uninitialized -->`.
 
 **`diary/lessons_learned.md`**:
@@ -267,6 +281,6 @@ Write or update each file that is uninitialized (or confirmed for merge in Phase
 - If no lessons yet: leave the file with just the header (no entries) and remove only the sentinel.
 - Remove `<!-- memtoad:uninitialized -->`.
 
-With enhanced memory on (0d), write the decision and lesson entries as full entries directly below `<!-- memstore:digests:end -->`, then follow the `session-historian` skill's enhanced-memory steps 2–4 (ingest, digest, compact, check-pointers) so the files start out as Index + digests.
+With enhanced memory on (0d), write the decision and lesson entries as full entries directly below `<!-- memstore:digests:end -->`, then follow the `session-historian` skill's enhanced-memory steps 2–5 (ingest, digest, compact, check-pointers) so the files start out as Index + digests.
 
 After writing all files, output a brief summary: which files were written, how many entries were added to each, and remind the user to run `/startup` to verify the briefing reads coherently.
