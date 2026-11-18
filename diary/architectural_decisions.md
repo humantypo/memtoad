@@ -4,7 +4,56 @@ Design principles and the reasoning behind non-obvious choices. Add an entry whe
 engineer would reasonably ask "why did they do it this way?" — and the answer isn't obvious
 from the code.
 
-Most recent decisions at top. No archiving.
+Most recent decisions at top. Nothing is deleted: an entry that stops applying gets a label in its
+heading, `(Month YYYY; superseded by <slug>)` or `(Month YYYY; retired <Mon YYYY>: <reason>)`.
+
+Last full review: November 18, 2026
+
+---
+
+## labels-not-deletion (November 18, 2026)
+
+An entry that stops being true keeps its text and gets a label inside its heading's date parenthetical: `superseded by <slug>` (the target may be in either file) or `retired <Mon YYYY>: <reason>` (one clause, at most 120 characters, no parentheses). An unlabelled entry is in force; there is no `active` status. Labels are applied at two moments only: by `session-historian` when it writes an entry, after asking whether the new entry replaces, retires or amends an existing one (an amendment corrects the old entry and leaves it in force); and by `/tidy` on demand. There are no profiles, schedules, counters or age rules, and no purge. With enhanced memory the label lives in the markdown only, the Index lists labelled entries last under "No longer in force", and `memstore set-label` applies one.
+
+**Why**: the owner had cleaned stale material out of diaries by hand for years, and the cost that drove it was correctness, not size: an entry that still reads as a current rule after a reversal or a removal misleads every later session. Deleting it would lose the record of what was tried and why it stopped working, which is half of what the diary is for. Deleting from the store would not even shrink the repository, since git keeps the old blobs. A first design (lifecycle states, four evidence tiers, five triggers, Archive/Balanced/Lean profiles) was red-teamed by a second model and cut down. A positive `active` status goes stale on its own. Age plus disuse needs per-machine state and is how the predecessor lost its early lessons (→ archive-files-are-never-read). A prompt at the end of the historian run arrives just before a commit, where it gets rubber-stamped. With the session-log rule fixed and capture depth free under the store, there was nothing left for a profile to set. The capture-time question is the strongest signal because the session that made a change knows what it replaced. Labels work in plain mode too, since a label deletes nothing.
+
+---
+
+## tidy-curates-with-evidence (November 18, 2026)
+
+`/tidy` curates both `architectural_decisions.md` and `lessons_learned.md`. It looks for four kinds of candidate:
+- an explicit `This reverses (→ slug)` pair;
+- supersession that was never written down, which it must quote from the later entry;
+- retirement, with the check that proves the subject is gone named;
+- an owner-stated retirement.
+
+It can also propose a minimal correction to an entry still in force. Lessons get stricter rules: retire one only when the hazard itself can no longer occur, prefer `superseded by` when a later entry carries its rule forward, and never retire one that another entry references. Every proposal comes with evidence and is applied only on confirmation. It never acts on age or topic similarity, and never runs on a schedule or at the end of another skill. In a plain diary it still folds reversal pairs. With enhanced memory it labels the older entry instead, and never folds or deletes a digest. This reverses (→ tidy-consolidates-not-archives).
+
+**Why**: the narrow 1.3 scope (explicit reversal pairs, decisions only) missed most of what goes stale. In this repo, two decisions still prescribed install scripts that no longer existed, and a later decision had replaced an approach without naming it. Neither shows up as a `This reverses` pair. Requiring evidence, and a quote for unrecorded supersession, keeps it from guessing on topic similarity, which was the original reason for the narrow scope. Folding is unsafe with the store: the older entry is already archived, and removing its digest leaves an archived entry that only a lucky search reaches, which `check-pointers` now reports as an error.
+
+---
+
+## session-log-is-active-work (November 18, 2026)
+
+"Most Recent Sessions" in `session_context.md` keeps only the current session and the one before it, counted by date (a second run on the same day updates that note), plus any older note whose work is still in flight. A new **Arc** section, one line per milestone, records where the project has been. Before a note drops off, anything durable becomes a decision or lesson (allowed even in a LIGHTWEIGHT run) or an Open Item. When the file is untracked, the historian lists the dropped notes before rewriting.
+
+**Why**: the owner's goal is a diary that shows where the project has been, the guidelines it followed and what did and did not work, without becoming a verbose journal of work done. A growing session log is exactly that journal, and its durable content belongs in the other two files. The red team found that in hybrid and private mode the file is untracked, so "git has the rest" is false and a silent trim is permanent; hence the listing. It also found that counting historian runs as sessions would make n-1 an hour old, since `/committer` runs the historian per commit. This repo's log already had a duplicated same-day heading. Without the Arc, trimming the log would have left no record of the project's path.
+
+---
+
+## review-cadence-from-git-marker (November 18, 2026)
+
+The FULL/LIGHTWEIGHT cadence is no longer stored per machine. Every FULL historian run sets a `Last full review: <Month D, YYYY>` line near the top of this file. `/committer` counts commits since the last commit that changed that line (`git log -1 -G'^Last full review:' -- diary/architectural_decisions.md`, then `git rev-list --count`).
+- A missing line or a shallow clone means "never", which forces FULL.
+- In private mode, where the diary is untracked, it counts commits since the line's date instead.
+- `hooks/record-commit.sh` and `historian_state.json` were removed. This amends (→ committer-diary-prep-only).
+
+**Why**: the owner wanted the capture state shared and coordinated across contributors. Committing `historian_state.json` as it was would have caused three problems:
+- The PostToolUse hook rewrites it after every commit, so the working tree would always be dirty.
+- Under `diary/`, staging it alone would satisfy the commit gate with no real diary update.
+- Its counter would conflict on every merge.
+
+Deriving from "the last commit touching `diary/`" was approved first, then found broken before it was built: the gate forces `diary/` into nearly every commit, so the count would stay near zero and the 5-commit and 3-day triggers would never fire (→ gated-paths-make-bad-change-signals). A dedicated line changes only on FULL runs, so curation edits to the same file don't reset it. The private-mode date fallback errs toward FULL. `skill_inventory_state.json` stays per machine on purpose: it describes that machine's installed skills.
 
 ---
 
@@ -16,7 +65,7 @@ Memtoad ships an optional Python package, `memstore/`, ported from the project i
 
 ---
 
-## tidy-consolidates-not-archives (August 2026)
+## tidy-consolidates-not-archives (August 2026; superseded by tidy-curates-with-evidence)
 
 `tidy` is a ninth skill that merges an architectural-decision entry with the earlier entry it explicitly reverses (`This reverses (→ slug)`) into one entry, in place. It matches only that authored phrase — never topic similarity or entry age — skips any pair where the older slug is still referenced elsewhere in the file, drafts the merge, and requires explicit user confirmation per pair before writing anything. It runs inline, not spawned, and only ever touches `architectural_decisions.md`.
 
@@ -26,7 +75,7 @@ Memtoad ships an optional Python package, `memstore/`, ported from the project i
 
 ## committer-diary-prep-only (August 2026, supersedes committer-owns-commit-discipline)
 
-`committer` no longer drafts commit messages or runs `git commit`. It does Steps 1–3 only — assess FULL/LIGHTWEIGHT mode, update the diary, stage `diary/` — then stops. Enforcement that the diary gets staged before a commit moves to a plugin-shipped hook (`hooks/check-diary-staged.sh`, `PreToolUse` on `Bash`) that denies `git commit` until `diary/` has staged changes (or the commit is documentation-only). A companion `hooks/record-commit.sh` (`PostToolUse`) takes over the FULL/LIGHTWEIGHT cadence bookkeeping in `historian_state.json` that `committer`'s removed commit step used to write, keyed off the actual `git rev-parse HEAD` after a real commit lands rather than off `committer` itself creating one.
+`committer` no longer drafts commit messages or runs `git commit`. It does Steps 1–3 only — assess FULL/LIGHTWEIGHT mode, update the diary, stage `diary/` — then stops. Enforcement that the diary gets staged before a commit moves to a plugin-shipped hook (`hooks/check-diary-staged.sh`, `PreToolUse` on `Bash`) that denies `git commit` until `diary/` has staged changes (or the commit is documentation-only). The FULL/LIGHTWEIGHT cadence that `committer`'s removed commit step used to record went first to a companion `PostToolUse` hook writing a per-machine `historian_state.json`. Since 2.0 it is a `Last full review:` line in this file, counted with git (→ review-cadence-from-git-marker).
 
 **Why**: drafting and executing `git commit` was scope creep — every agent harness already knows how to commit unprompted, so that half of `committer` was redundant, dead weight relative to Memtoad's stated mission of capturing project *why*, not orchestrating git. Worse, the only thing that had been guaranteeing the diary got updated before a commit was an advisory line in each project's `CLAUDE.md` ("run `/committer` before committing") — easy to silently skip precisely because committing is a default behavior models reach for without being told. A plugin hook enforces the same guarantee at the harness level instead of at the model-compliance level, and (unlike CLAUDE.md instructions) it ships and updates with the plugin itself via `claude plugin update` — no per-project injection required. Originally (June 2026) `committer` owned the full session-historian-then-commit workflow as a single atomic operation, because a two-command manual order (`/session-historian` then `git commit`) was easy for users to get wrong — but that problem turned out to be better solved by the hook than by folding commit execution into the skill.
 
@@ -58,13 +107,13 @@ Memtoad is distributed as a Claude Code plugin (`skills/` + `commands/` + `.clau
 
 ## private-mode-gitignores-claude-md (June 2026)
 
-In private mode, the install scripts add `CLAUDE.md` to `.gitignore` alongside `diary/`.
+In private mode, `/bootstrap` (step 0c) adds `CLAUDE.md` to `.gitignore` alongside `diary/`.
 
-**Why**: In private mode each contributor manages their own diary locally — but the CLAUDE.md Project Memory section now contains Memtoad-specific workflow instructions (`/session-historian`, `/grill-me`, the 3-step commit order). Pushing that content to teammates who haven't installed Memtoad produces confusing slash commands that don't exist for them and a pre-commit instruction they can't follow. Gitignoring CLAUDE.md in private mode keeps Memtoad's footprint fully local to the contributor who chose private tracking. Shared and hybrid modes commit CLAUDE.md normally because the team is presumed to share the tooling. (→ pre-commit-workflow-in-claude-md)
+**Why**: In private mode each contributor manages their own diary locally — but the CLAUDE.md Project Memory section now contains Memtoad-specific workflow instructions (Memtoad slash commands and the commit-gate note). Pushing that content to teammates who haven't installed Memtoad produces confusing slash commands that don't exist for them and a pre-commit instruction they can't follow. Gitignoring CLAUDE.md in private mode keeps Memtoad's footprint fully local to the contributor who chose private tracking. Shared and hybrid modes commit CLAUDE.md normally because the team is presumed to share the tooling. (→ pre-commit-workflow-in-claude-md)
 
 ---
 
-## pre-commit-workflow-in-claude-md (June 2026)
+## pre-commit-workflow-in-claude-md (June 2026; superseded by committer-diary-prep-only)
 
 The install scripts inject a 3-step pre-commit workflow block into the target project's CLAUDE.md as part of the Project Memory section.
 

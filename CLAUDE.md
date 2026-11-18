@@ -16,9 +16,8 @@ Commits that touch more than documentation are gated on `diary/` being staged �
 .claude-plugin/
   plugin.json                         — plugin manifest
 hooks/
-  hooks.json                          — registers the two hooks below
+  hooks.json                          — registers the hook below
   check-diary-staged.sh               — PreToolUse: denies git commit until diary/ is staged
-  record-commit.sh                    — PostToolUse: updates historian_state.json after a real commit
 skills/
   bootstrap/SKILL.md                  — project setup + diary population
   startup/SKILL.md                    — session context loader
@@ -27,7 +26,7 @@ skills/
   committer/SKILL.md                  — updates + stages diary before a commit
   context-capture/SKILL.md            — WIP state snapshot
   skill-inventory/SKILL.md            — skill/plugin audit
-  tidy/SKILL.md                       — consolidates superseded decision entries
+  tidy/SKILL.md                       — curates the diary: labels superseded/retired entries, folds reversals
   list/SKILL.md                       — command listing
 commands/
   bootstrap.md / startup.md / ...     — slash command wrappers

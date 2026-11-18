@@ -1,28 +1,60 @@
 ---
 name: tidy
-description: Consolidate superseded entries in diary/architectural_decisions.md — when a later entry reverses an earlier one, fold the pair into a single current entry in place. Never deletes reasoning, never archives, never touches lessons_learned.md or session_context.md. Run on demand, not automatically.
+description: Curate diary/architectural_decisions.md and diary/lessons_learned.md so what reads as in force is in force — fold a decision into the later entry that explicitly reverses it, label entries that are superseded or retired, and correct wording that names a mechanism since replaced. Proposes every change with its evidence and writes nothing until the user confirms. Never deletes reasoning, never archives, never acts on age alone. Run on demand, never on a schedule.
 ---
 
-Run the following steps **inline in the main conversation**. Never spawn an agent — the target file is small by design and the merge decisions benefit from being visible to the user as they happen.
+Run the following steps **inline in the main conversation**. Never spawn an agent: each change is an editorial call the user should watch being made, not receive as a finished diff.
 
-`tidy` exists because `architectural_decisions.md` and `lessons_learned.md` are deliberately append-only (→ three-files-no-archiving, → archive-files-are-never-read) — archiving by date or size was tried once and rejected because archived content stops being read. `tidy` does not archive anything and does not shorten the file by removing content. It only merges an explicit two-entry supersession into one entry, so a reader sees the current decision once instead of twice.
+## Why this exists
 
-## Step 1 — Find candidate pairs
+The two files are append-only (→ three-files-no-archiving), and archiving by date or size was tried and rejected because archived content stops being read (→ archive-files-are-never-read). So `tidy` never removes an entry from what is read. What it fixes is **correctness**: over time some entries stop being true. A later decision reverses them, the code they govern is removed, or the mechanism they name is replaced. A stale entry that still reads as in force misleads every future session. `tidy` makes that visible with a **label**, and keeps the entry's text, because what was tried and why it stopped applying is half of what the diary is for.
 
-Read `diary/architectural_decisions.md`. Find every entry whose body contains `This reverses (→ some-slug)`. For each hit, locate the entry headed `## some-slug (...)` earlier in the file. That's a candidate pair: a reversal entry (newer) and the entry it reverses (older).
+`session-historian` already labels what a *new* entry supersedes, at the moment it is written. `tidy` is for what that missed: an existing diary, or changes that happened without a diary entry naming the old one.
 
-## Step 2 — Filter to safe pairs
+## The label grammar
 
-Skip a candidate pair if either is true:
+A label goes inside the entry's date parenthetical, exactly in one of these forms:
 
-- The older slug is referenced by `(→ slug)` anywhere else in the file, in an entry that is not the reversal itself. That means other entries depend on the reader being able to find it as a standalone entry — merging would strand that context.
-- The older entry is itself a reversal of a still-older entry (a chain of 3+). Only merge the two most recent links once the chain has stopped growing; report longer chains to the user instead of guessing which links are safe to fold.
+```
+## old-slug (June 2026; superseded by new-slug)
+## old-slug (June 2026; retired Nov 2026: the install scripts were removed in the plugin conversion)
+```
 
-Only entries with the explicit `This reverses (→ slug)` phrase qualify. Do not merge entries just because they cover a related topic — `tidy` acts only on authored supersession language, never on inferred similarity.
+- The target of `superseded by` may be in either file: a lesson can be superseded by a decision.
+- The reason is one clause, at most 120 characters, with no parentheses.
+- An unlabelled entry is in force. There is no `active` label.
+- Labelling changes the heading only. The slug, the date and every `(→ slug)` reference stay valid.
 
-## Step 3 — Draft the merge
+## Step 1 — Read
 
-For each safe pair, draft a single replacement entry:
+Read both files in full. With enhanced memory (`CLAUDE.md` contains `<!-- memtoad:store -->`), read the Index with the memstore command's `index`, then the digests, and `get` the full entry for anything you are about to propose a change to.
+
+## Step 2 — Find candidates
+
+There are four kinds. Only these four count.
+
+1. **Reversal pairs.** An entry contains `This reverses (→ slug)`, and the entry it names is still unlabelled. In plain mode, propose **folding** the pair (below). With enhanced memory, propose **labelling** the older entry `superseded by <newer-slug>` instead. Folding there would leave the older entry's archived text with no digest, which `check-pointers` reports as an error.
+2. **Supersession that was never written down.** A later entry replaces an earlier one in substance without naming it. For example, a hook replaced an advisory instruction that an older entry prescribes. Propose `superseded by <later-slug>`. Quote the sentence in the later entry that does the replacing; if you cannot quote one, it is not a candidate.
+3. **Retirement.** What the entry governs no longer exists, and nothing replaced it. Evidence is required: name what you checked (a grep for the file, function, flag or command it names, the README, `git log --diff-filter=D`) and what you found. A renamed thing is not a gone thing, so search for where it went before proposing.
+4. **Owner-stated.** The user says "retire X because Y", or "X is replaced by Z". Propose exactly that label.
+
+Also flag, as a fifth kind, a **correction**. An entry still in force whose wording names a replaced mechanism (for example "the install scripts add …" when `/bootstrap` now does it) gets the smallest edit that makes it true again. Never change its decision or its reasoning.
+
+**Stricter rules for lessons.** A lesson records something that went wrong, and is often most valuable long after the code it names has gone.
+- Retire a lesson only when the *hazard itself* can no longer occur, not merely when the file it names is gone.
+- When a later entry carries the lesson's rule forward in a new form, prefer `superseded by <that-slug>`, so the lesson keeps a pointer to where its rule lives now.
+- Never retire a lesson that another entry references with `(→ slug)`.
+
+**Never a candidate on age alone,** and never on topic similarity: "these two entries are about the same thing" is not evidence.
+
+## Step 3 — Draft
+
+For each candidate, show it like this:
+- the entry's current heading, or the digest lead with enough of the body to judge;
+- the proposed heading, lead or correction;
+- the evidence, one or two lines.
+
+**Folding** (plain mode, reversal pairs only) drafts a single replacement entry:
 
 ```markdown
 ## newer-slug (Month YYYY, supersedes older-slug)
@@ -32,30 +64,26 @@ For each safe pair, draft a single replacement entry:
 **Why**: <the newer entry's WHY, unchanged or lightly trimmed>. Originally (older Month YYYY) <one compressed sentence: what the older entry decided and the core reason it was reconsidered — drawn from the older entry's own WHY, not invented>.
 ```
 
-Rules for the draft:
-
-- The surviving header keeps the *newer* slug and date, with `, supersedes older-slug` appended in the parenthetical — this keeps the older slug present as literal, greppable text so any existing `(→ older-slug)` reference elsewhere in the repo (e.g. in `session_context.md`, which gets fully rewritten by the next `/session-historian` run anyway) still resolves to something.
-- Keep the newer entry's decision statement and WHY as the operative content — that's what's actually true today.
-- Compress the older entry down to one clause inside the merged WHY. Do not drop its reasoning entirely; the goal is one entry that tells the whole arc, not a shorter entry that tells half of it.
-- Drop the now-redundant "This reverses (→ ...)" sentence — the parenthetical on the header already says that.
+The surviving header keeps the newer slug and date, and appends `, supersedes older-slug` to its parenthetical, so the older slug stays greppable. Drop the now-redundant "This reverses (→ ...)" sentence. Skip a fold when the older slug is referenced anywhere outside the reversing entry, or when the older entry is itself part of a chain of three or more; label it `superseded by` instead.
 
 ## Step 4 — Confirm before writing
 
-Show the user every candidate pair as a before (both original entries) / after (the drafted merge) comparison. Ask which pairs to apply — default to "all", but let the user exclude any. Do not write anything until confirmed.
+Show every proposal. Ask which to apply, defaulting to "all" but letting the user exclude any. Do not write anything until the user confirms.
 
 ## Step 5 — Apply and report
 
-For each confirmed pair, replace both original entries with the single merged entry, in the position the newer entry occupied. Leave everything else in the file untouched.
+- **Plain mode:** edit the headings, apply the corrections, and replace each folded pair with its merged entry in the position the newer one held. Leave everything else untouched.
+- **With enhanced memory:**
+  - A digested entry gets `<memstore command> set-label mem:diary/<file>#<slug> --superseded-by <slug>` (or `--retired "Mon YYYY: <reason>"`). This edits its lead and moves it to the Index's "No longer in force" list.
+  - A full entry below the digest region is edited in place.
+  - A correction to a digested entry is a correction to its digest text only; its archived original stays as written.
+  - Then run `<memstore command> check-pointers`, which must report 0 errors.
 
-Do not stage or commit the change. Tell the user to review with `git diff diary/architectural_decisions.md` and commit through the normal flow (or `/committer`) — this is an editorial change to diary content, not a session-historian write, and deserves the same review any diary edit gets.
-
-## With enhanced memory (`CLAUDE.md` contains `<!-- memtoad:store -->`)
-
-Act only on full entries below `<!-- memstore:digests:end -->`. An entry that has already been digested is archived in the store and is not edited here: list any `This reverses (→ slug)` pair that involves a digest to the user, and leave it. A merged full entry is then archived and digested by the normal `session-historian` steps (ingest, compact, check-pointers).
+Do not stage or commit. Tell the user to review with `git diff diary/` and commit through the normal flow (`/committer`). This is an editorial change and deserves the same review any diary edit gets.
 
 ## What NOT to do
 
-- Do not touch `diary/lessons_learned.md` — it has no authored "supersedes" convention today. If one emerges later, that's a separate decision, not something `tidy` should infer on its own.
-- Do not touch `diary/session_context.md` — it already self-tidies by being fully rewritten each session.
-- Do not merge based on topic, staleness, or entry age — only on explicit `This reverses (→ slug)` language.
-- Do not run automatically or suggest running on a cadence; this is a deliberate, user-invoked cleanup pass.
+- Do not delete an entry, a digest, or any of an entry's reasoning. Labelling keeps the text; folding compresses the older entry into one clause of the merged WHY.
+- Do not act on age, staleness without evidence, or topic similarity.
+- Do not touch `diary/session_context.md`. session-historian already keeps it to active work.
+- Do not run automatically or on a schedule, and do not propose a pass at the end of another skill. The user invokes `tidy`.

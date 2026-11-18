@@ -29,17 +29,27 @@ From Step 1's output, determine the mode.
 
 In that case, tell the user the staged changes are documentation-only and no diary update is needed, then stop.
 
-Otherwise determine the historian state file path dynamically:
+Otherwise read the cadence. It is not stored anywhere: every FULL run sets a `Last full review: <Month D, YYYY>` line near the top of `diary/architectural_decisions.md`, and git counts the commits since then, so every contributor gets the same answer.
 ```bash
-STATE_FILE=~/.claude/projects/$(pwd | tr '/' '-' | sed 's/^-//')/historian_state.json
-cat "$STATE_FILE" 2>/dev/null || echo '{"last_full_run_date":"1970-01-01","commits_since_last_full":0}'
+F=diary/architectural_decisions.md
+LAST=$(sed -n 's/^Last full review: //p' "$F" | head -1)
+echo "last full review: ${LAST:-never}"
+if [ -n "$LAST" ] && [ "$(git rev-parse --is-shallow-repository)" != true ]; then
+  if git ls-files --error-unmatch "$F" >/dev/null 2>&1; then
+    C=$(git log -1 --format=%H -G'^Last full review:' -- "$F")
+    echo "commits since: $([ -n "$C" ] && git rev-list --count "$C"..HEAD || echo 0)"
+  else
+    echo "commits since: $(git rev-list --count --since="$LAST 00:00" HEAD)"   # private mode: the diary is untracked
+  fi
+fi
 ```
+A missing line, or a shallow clone (which cannot count), means **never**.
 
 Choose **FULL** mode if ANY of the following are true:
 - Any staged file has a code extension: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rb`, `.java`, `.rs`, `.cs`, `.cpp`, `.c`, `.swift`, `.kt`, `.sh`, `.bash`
 - Any staged file has `A` (added) or `D` (deleted) status
-- `commits_since_last_full` ≥ 5
-- `last_full_run_date` is more than 3 days before today
+- The last full review is **never**, or more than 3 days before today
+- Commits since the last full review ≥ 5
 
 Otherwise: **LIGHTWEIGHT** mode.
 
@@ -47,9 +57,11 @@ Otherwise: **LIGHTWEIGHT** mode.
 
 Run session-historian **inline** using the rules in the `session-historian` skill:
 
-**LIGHTWEIGHT**: Update only `diary/session_context.md`. Append to `diary/lessons_learned.md` only if something non-obvious was learned this session. Do not touch `diary/architectural_decisions.md`.
+**LIGHTWEIGHT**: Update only `diary/session_context.md`. Append to `diary/lessons_learned.md` only if something non-obvious was learned this session. Do not touch `diary/architectural_decisions.md`, except to promote a decision from a session note that is dropping off.
 
-**FULL**: Update `diary/session_context.md`. Append to `diary/architectural_decisions.md` only if a new architectural decision was made. Append to `diary/lessons_learned.md` only if a new lesson was learned.
+**FULL**: Update `diary/session_context.md`. Append to `diary/architectural_decisions.md` only if a new architectural decision was made. Append to `diary/lessons_learned.md` only if a new lesson was learned. Set the `Last full review:` line to today.
+
+In both modes, session-historian labels any entry a new one supersedes and keeps the session log to the current session plus the one before it (see that skill).
 
 Do not reference the commit hash in diary entries — it isn't known yet, and this skill does not create the commit.
 

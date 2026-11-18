@@ -1,9 +1,11 @@
 """Consistency checks for the diary and for `mem:` pointers written anywhere in the repository's markdown.
 
 Errors (exit 1): a digest whose pointer does not resolve to the exact archived entry, a pointer naming another file or a
-duplicate slug, a malformed digest, a stale Index, unbalanced region markers, a `mem:` pointer in a document that does not
-resolve. Warnings (reported, exit 0): backticked names or numbers in a digest that its source entry does not contain
-(legitimate when the writer verified code locations, so they are to be read, not blindly fixed). Info: full entries not yet
+duplicate slug, a malformed digest, a stale Index, unbalanced region markers, a malformed label, an archived entry with
+neither a digest nor a full entry in its file (reachable only by luck of search), a `mem:` pointer in a document that does
+not resolve. Warnings (reported, exit 0): backticked names or numbers in a digest that its source entry does not contain
+(legitimate when the writer verified code locations, so they are to be read, not blindly fixed); a `superseded by` slug
+that names no entry in either file. Info: full entries not yet
 compacted or archived.
 """
 import re
@@ -44,8 +46,22 @@ def _unsupported(digest, source):
     return sorted(names), sorted(nums)
 
 
+def _check_label(rep, stem, text, slugs_everywhere):
+    try:
+        label = diary.label_of(text)
+    except diary.LabelError as exc:
+        rep.errors.append(f"{stem}: {exc}")
+        return
+    if label and label.startswith("superseded by ") and label.removeprefix("superseded by ") not in slugs_everywhere:
+        rep.warnings.append(f"{stem}: '{label}' names no entry in either diary file: {text[:70]}")
+
+
 def check_diary(store, folder, provenance=True):
     rep = CheckReport()
+    try:
+        everywhere = diary.known_slugs(folder)
+    except (FileNotFoundError, StoreError):
+        everywhere = set()
     for stem, levels in diary.FILES.items():
         path = Path(folder) / f"{stem}.md"
         text = path.read_text(encoding="utf-8")
@@ -76,6 +92,7 @@ def check_diary(store, folder, provenance=True):
                 rep.errors.append(f"{stem}: unbalanced backticks: {label}")
             if "mem:" in body:
                 rep.errors.append(f"{stem}: a digest carries a pointer inside its text: {label}")
+            _check_label(rep, stem, diary._lead(b), everywhere)
             try:
                 hit = store.get_pointer(ptr)
             except StoreError:
@@ -85,16 +102,26 @@ def check_diary(store, folder, provenance=True):
                 rep.errors.append(f"{stem}: pointer does not name one archived entry: {ptr}")
                 continue
             if provenance:
-                names, nums = _unsupported(b, hit[0].document)
+                lead = diary._lead(b)
+                unlabelled = b.replace(f"**{lead}**", f"**{diary._LABEL_TAIL.sub('', lead.rstrip('.').rstrip(')'))}**", 1)
+                names, nums = _unsupported(unlabelled, hit[0].document)  # a label's reason is not from the entry
                 if names or nums:
                     rep.warnings.append(f"{stem}: {label[:70]}: not in the source entry: names {names[:5]} numbers {nums[:5]}")
-        expected = [f"- {diary._lead(b).rstrip('.')}" for b in diary._sorted_digests(bullets)]
-        if index != expected:
+        if index != diary.index_lines(bullets):
             rep.errors.append(f"{stem}: the Index is stale ({len(index)} lines for {len(bullets)} digests); run `compact {stem}`")
-        ordered = [b for b in diary._sorted_digests(bullets)]
-        if ordered != bullets:
+        if diary.ordered_digests(bullets) != bullets:
             rep.errors.append(f"{stem}: digests are not in Index order; run `compact {stem}`")
+        present = set(slugs) | {e.slug for e in parsed.entries}
+        if store.exists:
+            rows = store.collection.get(where={"$and": [{"kind": "diary-entry"}, {"file": f"{stem}.md"}]}, include=["metadatas"])
+            for meta in rows["metadatas"]:
+                if meta["slug"] not in present:
+                    rep.errors.append(f"{stem}: archived entry '{meta['slug']}' has neither a digest nor a full entry in the "
+                                      f"file, so only a lucky search reaches it (renamed or deleted after ingest?). Fix: "
+                                      f"`restore {meta['pointer']}`, then `compact {stem}` it with a digest labelled "
+                                      f"`superseded by <new-slug>` (a rename) or `retired <Mon YYYY>: <why>`")
         for e in parsed.entries:
+            _check_label(rep, stem, e.heading, everywhere)
             archived = store.collection.get(ids=[f"diary/{stem}#{e.slug}"], include=["documents"])
             state = "archived" if archived["ids"] and archived["documents"][0] == e.text else "NOT archived (or changed): run `ingest diary`"
             rep.info.append(f"{stem}: full entry '{e.slug}' ({len(e.text):,} chars) not yet compacted, {state}")

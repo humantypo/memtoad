@@ -14,6 +14,8 @@ Before asking any questions, read these three files in order:
 
 With enhanced memory (`CLAUDE.md` contains `<!-- memtoad:store -->`), do not read the two big files whole: run the memstore command's `index`, read `diary/session_context.md`, then the digest paragraphs (or `get <pointer>` for the full entry) of the Index lines that bear on the plan, and `search "<topic>"` for anything the Index does not name.
 
+An entry labelled `superseded by <slug>` or `retired …` in its date parenthetical (or listed under "No longer in force" in the Index) is not a current constraint. Raise it only when the plan would repeat what it records as not having worked.
+
 After reading, output 1–2 sentences naming any constraints, decisions, or patterns from the diary that are directly relevant to the stated task. This lets the user correct misreadings before the interrogation begins. If nothing in the diary bears on the task, skip this acknowledgment and proceed silently.
 
 ## How to ask questions

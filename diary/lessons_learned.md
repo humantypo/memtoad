@@ -3,7 +3,24 @@
 Anti-patterns, failure modes, and hard-won rules. Most recent at top. Add an entry only when
 a lesson is non-obvious — if it's standard practice or documented in the framework, skip it.
 
-Cross-references use (→ slug-name) notation.
+Cross-references use (→ slug-name) notation. A lesson that no longer applies is labelled in its
+heading like a decision, never deleted.
+
+---
+
+## gated-paths-make-bad-change-signals (November 18, 2026)
+
+**Rule**: Never derive "when did X last happen" from changes to a path that another mechanism forces into every commit. Check which hooks, gates or tools touch the path before using its history as a signal; use a marker that changes only when X happens.
+
+**Why**: the plan for a shared historian cadence was "the last commit touching `diary/`", and it was approved before anyone noticed the conflict. The commit gate (`check-diary-staged.sh`) denies any non-doc commit unless `diary/` is staged, and with enhanced memory a mere `search` dirties the store's sqlite file. So nearly every commit touches `diary/`, the count since stays near zero, and the time-based FULL triggers silently never fire. Nothing would have errored; capture would just have quietly thinned. The fix was a dedicated `Last full review:` line (→ review-cadence-from-git-marker).
+
+---
+
+## untracked-diary-files-are-the-only-copy (November 18, 2026)
+
+**Rule**: Before trimming or rewriting a diary file, check whether git tracks it (`git ls-files --error-unmatch`). In hybrid mode `session_context.md` is untracked, and in private mode the whole `diary/` is, so whatever a rewrite drops is gone for good. Show the user what will be dropped.
+
+**Why**: the first curation proposal said dropped session notes were safe because "everything else lives in git". The red team pointed at this repo's own `.gitignore`, which ignores `diary/session_context.md`. The recommended team mode is exactly the one where the claim is false. An automatic, unconfirmed trim would have lost notes with nobody seeing it (→ session-log-is-active-work).
 
 ---
 
@@ -31,7 +48,7 @@ Cross-references use (→ slug-name) notation.
 
 ---
 
-## install-script-is-the-last-enforcement-point (June 2026)
+## install-script-is-the-last-enforcement-point (June 2026; superseded by committer-diary-prep-only)
 
 **Rule**: Any workflow step that must happen before every commit belongs in CLAUDE.md — written there by the install script, not just documented in the README.
 
